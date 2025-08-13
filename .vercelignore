@@ -1,0 +1,11 @@
+# Exclude Cypress completely from Vercel builds
+cypress/
+cypress.config.ts
+
+# Exclude other test files
+**/*.test.ts
+**/*.test.tsx
+**/*.spec.ts
+**/*.spec.tsx
+**/*.cy.ts
+**/*.cy.tsx
