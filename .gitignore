@@ -13,6 +13,7 @@
 /cypress/screenshots/
 /cypress/videos/
 /cypress/downloads/
+cypress/fixtures/downloads
 /cypress.env.json
 
 # next.js
@@ -41,3 +42,10 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# claude
+CLAUDE.md
+PRD.md
+
+# other
+misc/
