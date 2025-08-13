@@ -10,6 +10,18 @@ const compat = new FlatCompat({
 });
 
 const eslintConfig = [
+  // Add ignores first
+  {
+    ignores: [
+      "cypress/**",
+      "cypress.config.ts",
+      "**/*.cy.ts",
+      "**/*.cy.tsx",
+      ".next/**",
+      "out/**",
+      "node_modules/**",
+    ],
+  },
   ...compat.extends("next/core-web-vitals", "next/typescript"),
 ];
 
