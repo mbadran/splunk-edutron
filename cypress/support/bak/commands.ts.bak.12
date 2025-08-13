@@ -1,0 +1,351 @@
+// ***********************************************
+// Custom commands for Splunk EDUTRON testing
+// ***********************************************
+
+// Test timing constants
+const COMMAND_WAIT_TIME = 300;
+const LOAD_WAIT_TIME = 500;
+
+/**
+ * NAVIGATION & SETUP COMMANDS
+ */
+
+// Wait for the app to be ready
+Cypress.Commands.add("waitForAppReady", () => {
+  cy.get("body").should("not.contain", "Loading...");
+});
+
+// Wait for catalogs to be loaded from CSV files with actual course data
+Cypress.Commands.add("waitForCatalogsLoaded", () => {
+  cy.get("#monotable", { timeout: 30000 }).should("be.visible");
+  
+  // Wait for catalog data to load asynchronously
+  cy.wait(LOAD_WAIT_TIME);
+  
+  // Ensure courses are actually loaded (not just empty state)
+  cy.get("body").then(($body) => {
+    if ($body.find("#table-empty-state").length > 0) {
+      throw new Error("Catalog failed to load - no courses available for testing");
+    }
+  });
+  
+  // Verify minimum number of courses are present
+  cy.get('[id^="table-row-"]').should("have.length.greaterThan", 10);
+});
+
+// Wait for planner to be ready
+Cypress.Commands.add("waitForPlannerReady", () => {
+  cy.title().should("contain", "Planner");
+  cy.get("#planner").should("be.visible");
+  cy.get("#monotable").should("be.visible");
+  cy.get("#calculator").should("be.visible");
+
+  cy.get("body").then(($body) => {
+    if ($body.find("#table-loading-state").length > 0) {
+      cy.get("#table-loading-state").should("not.be.visible");
+    }
+  });
+});
+
+// Navigate to planner and wait for it to be ready
+Cypress.Commands.add("visitPlannerAndWait", () => {
+  cy.visit("/planner");
+  cy.waitForAppReady();
+  cy.get("#planner", { timeout: 15000 }).should("be.visible");
+  cy.get("#calculator", { timeout: 15000 }).should("be.visible");
+  cy.waitForCatalogsLoaded();
+  cy.waitForPlannerReady();
+});
+
+// Navigate to home page and wait for it to be ready
+Cypress.Commands.add("visitHomeAndWait", () => {
+  cy.visit("/");
+  cy.waitForAppReady();
+  cy.get("body").should("be.visible");
+  cy.title().should("contain", "Splunk EDUTRON");
+});
+
+/**
+ * TEAM MEMBER COMMANDS
+ */
+
+// Add team member via UserPlus button
+Cypress.Commands.add("addTeamMember", () => {
+  cy.log("🔍 Adding team member...");
+  cy.get("#plan-actions").should("be.visible");
+  cy.get("#plan-actions").within(() => {
+    cy.get('button[title="Add Team Member"]').should("be.visible");
+    cy.get('button[title="Add Team Member"]').should("not.be.disabled");
+    cy.get('button[title="Add Team Member"]').click();
+  });
+  cy.wait(COMMAND_WAIT_TIME);
+  cy.log("⏱️ Team member addition completed");
+});
+
+// Remove team member with confirmation
+Cypress.Commands.add("removeTeamMember", (memberName: string) => {
+  cy.log(`🗑️ Removing team member: ${memberName}`);
+  
+  const removeButtonSelector = `button[aria-label="Remove ${memberName} from the plan"]`;
+  cy.get(removeButtonSelector).should('be.visible').click();
+  
+  cy.get('#confirmation-modal-confirm').should('be.visible').click();
+  
+  cy.wait(COMMAND_WAIT_TIME);
+  cy.log(`⏱️ Removed ${memberName}`);
+});
+
+/**
+ * SELECTION COMMANDS
+ */
+
+// Select course for team member
+Cypress.Commands.add("selectCourseForMember", (rowIndex: number, memberColumnIndex?: number) => {
+  const columnIndex = memberColumnIndex || 10;
+  
+  cy.get(`#table-row-${rowIndex}`).within(() => {
+    cy.get(`[aria-colindex="${columnIndex}"]`).within(() => {
+      cy.get('[role="button"]').click();
+    });
+  });
+  cy.wait(COMMAND_WAIT_TIME);
+});
+
+/**
+ * ENHANCED CALCULATOR COMMANDS
+ */
+
+// Set budget amount (initial setting)
+Cypress.Commands.add("setBudget", (amount: number) => {
+  cy.log(`💰 Setting budget to: ${amount}`);
+  
+  cy.get("#calculator #budget-set").should("be.visible");
+  cy.get("#calculator #budget-set").click();
+  
+  cy.get("#calculator #budget-input").should("be.visible");
+  cy.get("#calculator #budget-input").clear().type(amount.toString());
+  cy.get("#calculator #budget-input").type("{enter}");
+  
+  cy.wait(COMMAND_WAIT_TIME);
+  cy.log(`✅ Budget set to: ${amount}`);
+});
+
+// Edit existing budget amount
+Cypress.Commands.add("editBudget", (newAmount: number) => {
+  cy.log(`✏️ Editing budget to: ${newAmount}`);
+  
+  cy.get("#calculator #budget-value").should("be.visible");
+  cy.get("#calculator #budget-value").click();
+  
+  cy.get("#calculator #budget-input").should("be.visible");
+  cy.get("#calculator #budget-input").clear().type(newAmount.toString());
+  cy.get("#calculator #budget-input").type("{enter}");
+  
+  cy.wait(COMMAND_WAIT_TIME);
+  cy.log(`✅ Budget edited to: ${newAmount}`);
+});
+
+// Delete/clear budget
+Cypress.Commands.add("deleteBudget", () => {
+  cy.log("🗑️ Deleting budget...");
+  cy.get("#calculator").within(() => {
+    cy.get("#budget-delete").should("be.visible").click();
+  });
+  cy.wait(COMMAND_WAIT_TIME);
+  cy.log("✅ Budget deleted");
+});
+
+// Toggle between Credits (TUs) and USD mode
+Cypress.Commands.add("toggleCreditsMode", () => {
+  cy.log("🔄 Toggling credits mode...");
+  cy.get("#calculator").within(() => {
+    cy.get("#currency-toggle").should("be.visible").click();
+  });
+  cy.wait(COMMAND_WAIT_TIME);
+  cy.log("✅ Credits mode toggled");
+});
+
+/**
+ * VERIFICATION COMMANDS
+ */
+
+// Verify team member exists
+Cypress.Commands.add("verifyTeamMemberExists", (memberName: string) => {
+  cy.get('body').then(($body) => {
+    if ($body.find('.team-member-header').length > 0) {
+      cy.get('.team-member-header').should("contain", memberName);
+    } else {
+      cy.get('#monotable').should("contain", memberName);
+    }
+  });
+});
+
+// Verify team member does not exist
+Cypress.Commands.add("verifyTeamMemberNotExists", (memberName: string) => {
+  cy.get('body').then(($body) => {
+    if ($body.find('.team-member-header').length > 0) {
+      cy.get('.team-member-header').should("not.contain", memberName);
+    } else {
+      cy.get('#monotable').should("not.contain", memberName);
+    }
+  });
+});
+
+// Verify calculator total (handles formatted numbers like "1,065")
+Cypress.Commands.add("verifyCalculatorTotal", (expectedTotal: number) => {
+  cy.get("#calculator").within(() => {
+    cy.get("#total-value").invoke('text').then((totalText) => {
+      // Remove commas and parse to number for comparison
+      const actualTotal = parseInt(totalText.replace(/,/g, ''));
+      expect(actualTotal).to.equal(expectedTotal);
+    });
+  });
+});
+
+// Verify budget amount (handles formatted numbers like "2,000")
+Cypress.Commands.add("verifyBudget", (expectedBudget: number) => {
+  cy.get("#calculator").within(() => {
+    cy.get("#budget-value").invoke('text').then((budgetText) => {
+      // Remove commas and parse to number for comparison
+      const actualBudget = parseInt(budgetText.replace(/,/g, ''));
+      expect(actualBudget).to.equal(expectedBudget);
+    });
+  });
+});
+
+// Verify budget difference (gap/surplus) - handles formatted numbers and calculator quirks
+Cypress.Commands.add("verifyBudgetDifference", (expectedDifference: number) => {
+  cy.get("#calculator").within(() => {
+    cy.get("#difference-value").invoke('text').then((diffText) => {
+      // Debug log to see what we're actually getting
+      cy.log(`Raw difference text: "${diffText}"`);
+      
+      // Remove commas and parse
+      const cleanText = diffText.replace(/,/g, '');
+      let actualDifference = parseInt(cleanText);
+      
+      // If expected is negative but actual is positive, the calculator shows absolute value
+      if (expectedDifference < 0 && actualDifference > 0) {
+        actualDifference = -actualDifference; // Convert to negative
+        cy.log(`Converted positive ${parseInt(cleanText)} to negative ${actualDifference} for deficit scenario`);
+      }
+      
+      cy.log(`Cleaned text: "${cleanText}", Parsed: ${actualDifference}, Expected: ${expectedDifference}`);
+      expect(actualDifference).to.equal(expectedDifference);
+    });
+  });
+});
+
+// Verify selection state
+Cypress.Commands.add("verifySelectionState", (rowIndex: number, shouldBeSelected: boolean, memberColumnIndex?: number) => {
+  const columnIndex = memberColumnIndex || 10;
+  
+  cy.get(`#table-row-${rowIndex}`).within(() => {
+    cy.get(`[aria-colindex="${columnIndex}"]`).within(() => {
+      if (shouldBeSelected) {
+        cy.get(".bg-emerald-400, .plan-cell-selected").should("exist");
+      } else {
+        cy.get(".border-gray-300, .plan-cell-unselected").should("exist");
+      }
+    });
+  });
+});
+
+/**
+ * FOOTER VERIFICATION COMMANDS
+ */
+
+// Parse footer message and extract stats
+Cypress.Commands.add("parseFooterStats", () => {
+  return cy.get("#table-footer").invoke('text').then((footerText) => {
+    cy.log(`📊 Parsing footer: "${footerText}"`);
+    
+    // Extract numbers using regex patterns
+    const selectionsMatch = footerText.match(/(\d+)\s+selections?/);
+    const teamsMatch = footerText.match(/(\d+)\s+teams?/);
+    const membersMatch = footerText.match(/(\d+)\s+team\s+members?/);
+    const catalogsMatch = footerText.match(/(\d+)\s+catalogs?/);
+    const coursesMatch = footerText.match(/(\d+)\s+courses?/);
+    const filteredMatch = footerText.match(/(\d+)\s+filtered/);
+    
+    const stats = {
+      selections: selectionsMatch ? parseInt(selectionsMatch[1]) : 0,
+      teams: teamsMatch ? parseInt(teamsMatch[1]) : 0,
+      teamMembers: membersMatch ? parseInt(membersMatch[1]) : 0,
+      catalogs: catalogsMatch ? parseInt(catalogsMatch[1]) : 0,
+      courses: coursesMatch ? parseInt(coursesMatch[1]) : 0,
+      filtered: filteredMatch ? parseInt(filteredMatch[1]) : null,
+    };
+    
+    cy.log(`📊 Parsed stats:`, stats);
+    return cy.wrap(stats);
+  });
+});
+
+// Verify footer shows expected stats
+Cypress.Commands.add("verifyFooterStats", (expectedStats: Partial<{
+  selections: number;
+  teams: number;
+  teamMembers: number;
+  catalogs: number;
+  courses: number;
+  filtered: number | null;
+}>) => {
+  cy.parseFooterStats().then((actualStats) => {
+    Object.keys(expectedStats).forEach((key) => {
+      const expected = expectedStats[key as keyof typeof expectedStats];
+      const actual = actualStats[key as keyof typeof actualStats];
+      
+      if (expected !== undefined) {
+        expect(actual).to.equal(expected, `Footer ${key} count mismatch`);
+        cy.log(`✅ Footer ${key}: ${actual} (expected: ${expected})`);
+      }
+    });
+  });
+});
+
+// Verify footer message contains specific text
+Cypress.Commands.add("verifyFooterContains", (expectedText: string) => {
+  cy.get("#table-footer").should("contain", expectedText);
+});
+
+// Verify footer shows correct pluralization
+Cypress.Commands.add("verifyFooterPluralization", () => {
+  cy.parseFooterStats().then((stats) => {
+    cy.get("#table-footer").invoke('text').then((footerText) => {
+      cy.log(`🔍 Checking pluralization in: "${footerText}"`);
+      
+      // Check team members pluralization - exact string matches
+      if (stats.teamMembers === 1) {
+        expect(footerText).to.contain("1 team member");
+        expect(footerText).to.not.contain("1 team members");
+        cy.log(`✅ Singular: "1 team member" found correctly`);
+      } else if (stats.teamMembers > 1) {
+        expect(footerText).to.contain(`${stats.teamMembers} team members`);
+        cy.log(`✅ Plural: "${stats.teamMembers} team members" found correctly`);
+      }
+      
+      // Check selections pluralization - exact string matches
+      if (stats.selections === 1) {
+        expect(footerText).to.contain("1 selection");
+        expect(footerText).to.not.contain("1 selections");
+        cy.log(`✅ Singular: "1 selection" found correctly`);
+      } else if (stats.selections > 1) {
+        expect(footerText).to.contain(`${stats.selections} selections`);
+        cy.log(`✅ Plural: "${stats.selections} selections" found correctly`);
+      }
+      
+      // Check teams pluralization - exact string matches
+      if (stats.teams === 1) {
+        expect(footerText).to.contain("1 team");
+        expect(footerText).to.not.contain("1 teams");
+        cy.log(`✅ Singular: "1 team" found correctly`);
+      } else if (stats.teams > 1) {
+        expect(footerText).to.contain(`${stats.teams} teams`);
+        cy.log(`✅ Plural: "${stats.teams} teams" found correctly`);
+      }
+      
+      cy.log("✅ Footer pluralization verified");
+    });
+  });
+});

@@ -1,0 +1,333 @@
+import React from "react";
+import {
+  useReactTable,
+  getCoreRowModel,
+  getSortedRowModel,
+  ColumnResizeMode,
+} from "@tanstack/react-table";
+import { Clock, DollarSign, ExternalLink, FileText } from "lucide-react";
+import { useAtom } from "jotai";
+import { atomWithStorage } from "jotai/utils";
+import BaseTable, {
+  createColumnsFromConfig,
+  ColumnConfig,
+  ColumnSizeConfig,
+} from "@/components/common/BaseTable";
+import CatalogBase from "./CatalogBase";
+import { Course } from "@/types/types";
+import {
+  COURSE_URL,
+  CATEGORY_COLORS,
+  MODE_COLORS,
+  MODE_TOOLTIPS,
+  DEFAULT_TABLE,
+  DETAILS_URL,
+} from "@/utils/constants";
+
+interface CatalogTableProps {
+  onScroll?: (scrollTop: number) => void;
+}
+
+// Jotai atoms for state management
+const tableSortingAtom = atomWithStorage("catalog-table-sorting", []);
+
+// Configuration constants
+const COLUMN_EXCEPTIONS = new Set<string>([
+  "STEP_ID", // Use values but don't display as column
+]);
+
+// Define column order - columns not in this list will be added at the end
+const COLUMN_ORDER = [
+  "ID",
+  "Category",
+  "Price",
+  "Name",
+  "PDF",
+  "Mode",
+  "Language",
+  "Duration",
+];
+
+// Column size configuration
+const COLUMN_SIZES: Record<string, ColumnSizeConfig> = {
+  "#": {
+    size: DEFAULT_TABLE.COLUMN_WIDTH.XSMALL,
+    minSize: DEFAULT_TABLE.COLUMN_LIMITS.MIN_XSMALL,
+    maxSize: DEFAULT_TABLE.COLUMN_LIMITS.MAX_XSMALL,
+  },
+  ID: {
+    size: DEFAULT_TABLE.COLUMN_WIDTH.MEDIUM,
+    minSize: DEFAULT_TABLE.COLUMN_LIMITS.MIN_MEDIUM,
+    maxSize: DEFAULT_TABLE.COLUMN_LIMITS.MAX_MEDIUM,
+  },
+  Category: {
+    size: DEFAULT_TABLE.COLUMN_WIDTH.MEDIUM,
+    minSize: DEFAULT_TABLE.COLUMN_LIMITS.MIN_LARGE,
+    maxSize: DEFAULT_TABLE.COLUMN_LIMITS.MAX_LARGE,
+  },
+  Mode: {
+    size: DEFAULT_TABLE.COLUMN_WIDTH.SMALL,
+    minSize: DEFAULT_TABLE.COLUMN_LIMITS.MIN_SMALL,
+    maxSize: DEFAULT_TABLE.COLUMN_LIMITS.MAX_SMALL,
+  },
+  Language: {
+    size: DEFAULT_TABLE.COLUMN_WIDTH.SMALL,
+    minSize: DEFAULT_TABLE.COLUMN_LIMITS.MIN_SMALL,
+    maxSize: DEFAULT_TABLE.COLUMN_LIMITS.MAX_SMALL,
+  },
+  Duration: {
+    size: DEFAULT_TABLE.COLUMN_WIDTH.SMALL,
+    minSize: DEFAULT_TABLE.COLUMN_LIMITS.MIN_LARGE,
+    maxSize: DEFAULT_TABLE.COLUMN_LIMITS.MAX_LARGE,
+  },
+  Price: {
+    size: DEFAULT_TABLE.COLUMN_WIDTH.MEDIUM,
+    minSize: DEFAULT_TABLE.COLUMN_LIMITS.MIN_MEDIUM,
+    maxSize: DEFAULT_TABLE.COLUMN_LIMITS.MAX_LARGE,
+  },
+  Name: {
+    size: DEFAULT_TABLE.COLUMN_WIDTH.XXLARGE,
+    minSize: DEFAULT_TABLE.COLUMN_LIMITS.MIN_XXLARGE,
+    maxSize: DEFAULT_TABLE.COLUMN_LIMITS.MAX_XXLARGE,
+  },
+  PDF: {
+    size: DEFAULT_TABLE.COLUMN_WIDTH.SMALL,
+    minSize: DEFAULT_TABLE.COLUMN_LIMITS.MIN_SMALL,
+    maxSize: DEFAULT_TABLE.COLUMN_LIMITS.MAX_SMALL,
+  },
+};
+
+// Course-specific cell renderer component
+const CourseCellRenderer: React.FC<{
+  columnKey: string;
+  value: unknown;
+  course: Course;
+  rowIndex: number;
+}> = ({ columnKey, value, course, rowIndex }) => {
+  const cellId = `course-${columnKey.toLowerCase()}-${rowIndex}`;
+  const baseClassName = "h-12 flex items-center px-2";
+
+  const renderCellContent = () => {
+    switch (columnKey) {
+      case "ID":
+        return (
+          <div className={`${baseClassName} justify-start`}>
+            <code className="text-sm font-mono text-gray-700 bg-gray-200 px-2 py-1 rounded whitespace-nowrap">
+              {String(value)}
+            </code>
+          </div>
+        );
+
+      case "Category":
+        return (
+          <div className={`${baseClassName} justify-start`}>
+            <span
+              className={`px-2 py-1 rounded-full text-xs font-medium whitespace-nowrap ${
+                CATEGORY_COLORS[String(value)] || "bg-gray-500 text-white"
+              }`}
+            >
+              {String(value)}
+            </span>
+          </div>
+        );
+
+      case "Mode":
+        return (
+          <div className={`${baseClassName} justify-start`}>
+            <span
+              className={`px-2 py-1 rounded-full text-xs font-medium whitespace-nowrap cursor-help ${
+                MODE_COLORS[String(value)] || "bg-gray-100 text-gray-800"
+              }`}
+              title={MODE_TOOLTIPS[String(value)] || String(value)}
+            >
+              {String(value)}
+            </span>
+          </div>
+        );
+
+      case "Language":
+        return (
+          <div className={`${baseClassName} justify-start`}>
+            <span className="px-2 py-1 rounded-full text-xs font-medium whitespace-nowrap bg-blue-100 text-blue-800">
+              {String(value)}
+            </span>
+          </div>
+        );
+
+      case "Duration":
+        return (
+          <div className={`${baseClassName} justify-start`}>
+            <div className="relative bg-yellow-100 px-2 py-1 rounded inline-block">
+              <Clock className="absolute left-1 top-1/2 transform -translate-y-1/2 w-3 h-3 text-gray-600 opacity-80" />
+              <span className="text-sm font-medium text-gray-700 pl-4">
+                {String(value)}h
+              </span>
+            </div>
+          </div>
+        );
+
+      case "Price":
+        const price = Number(value);
+        return (
+          <div className={`${baseClassName} justify-start`}>
+            {price === 0 ? (
+              <span className="text-gray-700 font-medium text-sm bg-green-200 px-2 py-1 rounded whitespace-nowrap">
+                Free
+              </span>
+            ) : (
+              <div className="flex items-center text-gray-700 bg-pink-200 px-2 py-1 rounded">
+                <DollarSign className="w-3 h-3 mr-1" />
+                <span className="font-medium text-sm font-mono">
+                  {price.toLocaleString("en-US")}
+                </span>
+              </div>
+            )}
+          </div>
+        );
+
+      case "Name":
+        return (
+          <div className={`${baseClassName} justify-start`}>
+            <div className="w-full min-w-0">
+              {course.STEP_ID ? (
+                <a
+                  href={COURSE_URL.replace("<STEP_ID>", course.STEP_ID)}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-orange-600 hover:text-orange-800 font-medium flex items-center gap-1 group min-w-0 w-full"
+                  title={String(value)}
+                >
+                  <span className="truncate min-w-0 flex-1">
+                    {String(value)}
+                  </span>
+                  <ExternalLink className="w-3 h-3 opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0" />
+                </a>
+              ) : (
+                <span
+                  className="font-medium text-gray-900 truncate block min-w-0 w-full"
+                  title={String(value)}
+                >
+                  {String(value)}
+                </span>
+              )}
+            </div>
+          </div>
+        );
+
+      case "PDF":
+        return (
+          <div className={`${baseClassName} justify-center`}>
+            {course.Alias ? (
+              <a
+                href={DETAILS_URL.replace("<COURSE_ALIAS>", course.Alias)}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-red-600 hover:text-red-800 transition-colors p-1 rounded hover:bg-red-50"
+                title={`View PDF for ${course.Name || "course"}`}
+              >
+                <FileText className="w-4 h-4" />
+              </a>
+            ) : (
+              <span className="text-gray-400" title="PDF not available">
+                <FileText className="w-4 h-4" />
+              </span>
+            )}
+          </div>
+        );
+
+      default:
+        return (
+          <div className={`${baseClassName} justify-start`}>
+            <span
+              className="text-sm text-gray-700 truncate w-full"
+              title={String(value)}
+            >
+              {String(value)}
+            </span>
+          </div>
+        );
+    }
+  };
+
+  return <div id={cellId}>{renderCellContent()}</div>;
+};
+
+// Column configuration for Course data
+const createCourseColumnConfig = (): ColumnConfig<Course> => ({
+  columnOrder: COLUMN_ORDER,
+  columnExceptions: COLUMN_EXCEPTIONS,
+  columnSizes: COLUMN_SIZES,
+  cellRenderers: {
+    // All columns use the same CourseCellRenderer which handles the switch logic internally
+    ID: CourseCellRenderer,
+    Category: CourseCellRenderer,
+    Mode: CourseCellRenderer,
+    Language: CourseCellRenderer,
+    Duration: CourseCellRenderer,
+    Price: CourseCellRenderer,
+    Name: CourseCellRenderer,
+    PDF: CourseCellRenderer,
+  },
+  customAccessors: {
+    // PDF column uses Alias for sorting/filtering instead of the column value
+    PDF: (course) => course.Alias || "",
+  },
+  customSortingFns: {
+    // PDF column sorting based on Alias
+    PDF: (rowA, rowB) => {
+      const aliasA = rowA.original.Alias || "";
+      const aliasB = rowB.original.Alias || "";
+      return aliasA.localeCompare(aliasB);
+    },
+  },
+});
+
+const CatalogTable: React.FC<CatalogTableProps> = ({ onScroll }) => {
+  const [sorting, setSorting] = useAtom(tableSortingAtom);
+
+  return (
+    <div id="catalog-table-container" className="h-full">
+      <CatalogBase>
+        {({ courses, isLoading, error }) => {
+          // Create columns using BaseTable's configuration-driven approach
+          const columnConfig = createCourseColumnConfig();
+          const columns = createColumnsFromConfig(courses || [], columnConfig);
+
+          const table = useReactTable({
+            data: courses || [],
+            columns,
+            getCoreRowModel: getCoreRowModel(),
+            getSortedRowModel: getSortedRowModel(),
+            state: {
+              sorting,
+            },
+            onSortingChange: setSorting,
+            columnResizeMode: "onChange" as ColumnResizeMode,
+            enableColumnResizing: true,
+            enableSorting: !isLoading && !error,
+          });
+
+          // Handle loading and error states after hooks are called
+          if (isLoading || error) {
+            return null; // CatalogBase handles loading and error states
+          }
+
+          return (
+            <div id="catalog-table" className="h-full">
+              <BaseTable
+                table={table}
+                onScroll={onScroll}
+                headerClassName="bg-slate-800"
+                rowHeight={48}
+                emptyStateMessage="No courses available"
+                loadingState={false}
+              />
+            </div>
+          );
+        }}
+      </CatalogBase>
+    </div>
+  );
+};
+
+export default CatalogTable;

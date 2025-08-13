@@ -1,0 +1,98 @@
+import { atom } from "jotai";
+import { atomWithStorage } from "jotai/utils";
+
+// Table state snapshot interface
+export interface TableStateSnapshot {
+  tableId: string;
+  sorting: any[];
+  filters: any[];
+  columnOrder: string[];
+  timestamp: string;
+}
+
+// Table history state
+export interface TableHistoryState {
+  undoStack: TableStateSnapshot[];
+  redoStack: TableStateSnapshot[];
+  maxHistorySize: number;
+}
+
+// Table history with persistence - survives browser refreshes
+const initialTableHistoryState: TableHistoryState = {
+  undoStack: [],
+  redoStack: [],
+  maxHistorySize: 50, // Smaller than plan history since table changes are frequent
+};
+
+export const tableHistoryStateAtom = atomWithStorage<TableHistoryState>("tableHistory", initialTableHistoryState);
+
+// Derived atoms for table undo/redo capabilities
+export const canUndoTableAtom = atom((get) => {
+  const history = get(tableHistoryStateAtom);
+  return history.undoStack.length > 0;
+});
+
+export const canRedoTableAtom = atom((get) => {
+  const history = get(tableHistoryStateAtom);
+  return history.redoStack.length > 0;
+});
+
+// Helper to add table state change to history
+export const addToTableHistory = (get: any, set: any, snapshot: TableStateSnapshot) => {
+  const currentHistory = get(tableHistoryStateAtom);
+  
+  // Don't add if it's the same as the last snapshot
+  const lastSnapshot = currentHistory.undoStack[currentHistory.undoStack.length - 1];
+  if (lastSnapshot && 
+      JSON.stringify(lastSnapshot.sorting) === JSON.stringify(snapshot.sorting) &&
+      JSON.stringify(lastSnapshot.filters) === JSON.stringify(snapshot.filters) &&
+      JSON.stringify(lastSnapshot.columnOrder) === JSON.stringify(snapshot.columnOrder)) {
+    return;
+  }
+  
+  // Add to undo stack and clear redo stack
+  const newUndoStack = [...currentHistory.undoStack, snapshot];
+  
+  // Limit history size
+  const trimmedUndoStack = newUndoStack.length > currentHistory.maxHistorySize
+    ? newUndoStack.slice(-currentHistory.maxHistorySize)
+    : newUndoStack;
+  
+  set(tableHistoryStateAtom, {
+    ...currentHistory,
+    undoStack: trimmedUndoStack,
+    redoStack: [], // Clear redo stack on new action
+  });
+};
+
+// Helper to create table state snapshot
+export const createTableSnapshot = (
+  tableId: string,
+  sorting: any[],
+  filters: any[],
+  columnOrder: string[]
+): TableStateSnapshot => ({
+  tableId,
+  sorting: [...sorting],
+  filters: [...filters],
+  columnOrder: [...columnOrder],
+  timestamp: new Date().toISOString(),
+});
+
+// Clear table history for a specific table
+export const clearTableHistoryAtom = atom(
+  null,
+  (get, set, tableId: string) => {
+    const currentHistory = get(tableHistoryStateAtom);
+    
+    // Filter out history for this specific table
+    const newUndoStack = currentHistory.undoStack.filter(snapshot => snapshot.tableId !== tableId);
+    const newRedoStack = currentHistory.redoStack.filter(snapshot => snapshot.tableId !== tableId);
+    
+    set(tableHistoryStateAtom, {
+      ...currentHistory,
+      undoStack: newUndoStack,
+      redoStack: newRedoStack,
+    });
+  }
+);

@@ -1,0 +1,19 @@
+export interface Course {
+  Price: number;
+  [key: string]: any;
+}
+
+export interface PlanState {
+  title: string;
+  courseCount: number;
+  teamMembers: string[];
+  selections: Record<string, boolean>;
+}
+
+export interface ConfirmationModalProps {
+  isOpen: boolean;
+  onClose: () => void;
+  onConfirm: () => void;
+  title: string;
+  message: string;
+}

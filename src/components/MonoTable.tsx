@@ -1,0 +1,356 @@
+import React, { useEffect } from "react";
+import {
+  useReactTable,
+  getCoreRowModel,
+  getSortedRowModel,
+  getFilteredRowModel,
+  ColumnResizeMode,
+} from "@tanstack/react-table";
+import { useAtom } from "jotai";
+import { atomWithStorage } from "jotai/utils";
+import { ChevronUp } from "lucide-react";
+
+// Updated imports to use BaseTable2 and new utilities
+import BaseTable2 from "./common/table/BaseTable2";
+import { TableFooterProps } from "./common/table/TableFooter";
+import { useMonoTable } from "@/hooks/planner/useMonoTable";
+import { reorderColumns } from "@/utils/table/coreTableHelpers";
+import {
+  generatePlanFooterMessage,
+  DEFAULT_PLAN_COLUMN_ORDER,
+  generateTeamMemberColumnId,
+} from "@/utils/table/planTableHelpers";
+
+import { DEFAULT_TEAM_NAMES } from "@/utils/constants";
+import {
+  plannerCoursesAtom,
+  planStateAtom,
+  addTeamMemberAtom,
+  setStatusAtom,
+} from "@/atoms/globalAtoms";
+import { useCatalogs } from "@/hooks/shared/useCatalogs";
+import { useMonoTableSelection } from "@/hooks/planner/useMonoTableSelection";
+import { useTeamMemberManagement } from "@/hooks/planner/useTeamMemberManagement";
+import { useMonoTableColumns } from "@/hooks/planner/useMonoTableColumns";
+import { Person } from "@/types/types";
+
+// FIXED: Jotai atoms for MonoTable state management with camelCase localStorage keys
+const monoTableSortingAtom = atomWithStorage("monoTableSorting", []);
+const monoTableFiltersAtom = atomWithStorage("monoTableFilters", []);
+const monoTableColumnOrderAtom = atomWithStorage("monoTableColumnOrder", []);
+
+// Enhanced footer message generator
+const generateEnhancedPlanFooterMessage = (
+  filteredCourses: number,
+  totalCourses: number,
+  teamMemberCount: number,
+  selectedCourses: number,
+  catalogCount: number = 1,
+  hasFilters: boolean = false,
+): string => {
+  const parts: string[] = [];
+
+  // Always show selections if any exist
+  if (selectedCourses > 0) {
+    parts.push(`**${selectedCourses}** selections`);
+  }
+
+  // Team info
+  parts.push(`**1** team`);
+  parts.push(
+    `**${teamMemberCount}** team member${teamMemberCount !== 1 ? "s" : ""}`,
+  );
+
+  // Catalog info
+  parts.push(`**${catalogCount}** catalog`);
+
+  // Course info
+  parts.push(`**${totalCourses}** courses`);
+
+  // Filter info (only if filtering)
+  if (hasFilters && filteredCourses !== totalCourses) {
+    parts.push(`**${filteredCourses}** filtered`);
+  }
+
+  return `${parts.join(" • ")}`;
+};
+
+const MonoTable: React.FC = () => {
+  // Use useCatalogs hook to ensure data is loaded
+  const { catalogs, loading, error } = useCatalogs();
+  const [courses] = useAtom(plannerCoursesAtom);
+  const [planState] = useAtom(planStateAtom);
+  const [, addTeamMember] = useAtom(addTeamMemberAtom);
+  const [, setStatus] = useAtom(setStatusAtom);
+
+  // Table state management
+  const [sorting, setSorting] = useAtom(monoTableSortingAtom);
+  const [columnFilters, setColumnFilters] = useAtom(monoTableFiltersAtom);
+  const [columnOrder, setColumnOrder] = useAtom(monoTableColumnOrderAtom);
+  const tableRef = React.useRef<{ scrollToTop: () => void }>(null);
+  const [showScrollTop, setShowScrollTop] = React.useState(false);
+
+  // Get reset functionality
+  const { resetTableState } = useMonoTable();
+
+  // Custom hooks for modular functionality
+  const selectionHook = useMonoTableSelection();
+  const teamManagementHook = useTeamMemberManagement();
+
+  // Column move handler
+  const handleMoveColumn = React.useCallback(
+    (draggedColumnId: string, direction: "left" | "right") => {
+      console.log("🔥 handleMoveColumn called:", {
+        draggedColumnId,
+        direction,
+      });
+
+      // Build current order including team member columns
+      const courseColumnIds = DEFAULT_PLAN_COLUMN_ORDER;
+      const teamColumnIds = planState.teamMembers.map((member) =>
+        generateTeamMemberColumnId(member.id),
+      );
+      const currentFullOrder = [...courseColumnIds, ...teamColumnIds];
+
+      const currentOrder =
+        columnOrder.length > 0 ? columnOrder : currentFullOrder;
+
+      console.log("Current order:", currentOrder);
+
+      const newOrder = reorderColumns(currentOrder, draggedColumnId, direction);
+
+      if (newOrder !== currentOrder) {
+        console.log(`Moving column ${draggedColumnId} ${direction}:`, newOrder);
+        setColumnOrder(newOrder);
+      } else {
+        console.log("No change in column order");
+      }
+    },
+    [columnOrder, setColumnOrder, planState.teamMembers],
+  );
+
+  // Get columns with move handler
+  const { allColumns } = useMonoTableColumns(
+    planState.teamMembers,
+    selectionHook,
+    teamManagementHook,
+    handleMoveColumn,
+  );
+
+  // Debug logging to track data flow
+  useEffect(() => {
+    console.log("MonoTable - catalogs loaded:", catalogs.length);
+    console.log("MonoTable - courses from atom:", courses?.length || 0);
+    console.log("MonoTable - plan state catalogs:", planState.catalogs);
+    console.log(
+      "MonoTable - team members:",
+      planState.teamMembers?.length || 0,
+    );
+
+    if (courses?.length > 0) {
+      console.log("MonoTable - sample course:", courses[0]);
+    }
+  }, [catalogs, courses, planState]);
+
+  // Initialize team members if empty
+  useEffect(() => {
+    if (planState.teamMembers.length === 0) {
+      const defaultMember: Person = {
+        id: `person-initial`, // This will be replaced by addTeamMemberAtom with proper random ID
+        name: DEFAULT_TEAM_NAMES[0] || "Team Member 1",
+        teamId: "team-initial", // This will be set properly by addTeamMemberAtom
+      };
+      addTeamMember(defaultMember);
+    }
+  }, [planState.teamMembers.length, addTeamMember]);
+
+  // Debug column order state
+  useEffect(() => {
+    console.log("🔥 MonoTable columnOrder state:", columnOrder);
+  }, [columnOrder]);
+
+  // Create table with TanStack's built-in features
+  const table = useReactTable({
+    data: courses || [],
+    columns: allColumns,
+    getCoreRowModel: getCoreRowModel(),
+    getSortedRowModel: getSortedRowModel(),
+    getFilteredRowModel: getFilteredRowModel(),
+    enableColumnResizing: true,
+    enableColumnPinning: true,
+    enableSorting: true,
+    enableRowSelection: true,
+    enableColumnFilters: true,
+    enableColumnOrdering: true,
+    columnResizeMode: "onChange" as ColumnResizeMode,
+    state: {
+      sorting,
+      columnFilters,
+      // FIXED: Ensure columnOrder is properly passed to TanStack
+      columnOrder: columnOrder.length > 0 ? columnOrder : undefined,
+      columnPinning: {
+        left: [
+          "#",
+          "ID",
+          "Name",
+          "Category",
+          "Price",
+          "PDF",
+          "Mode",
+          "Language",
+          "Duration",
+        ],
+      },
+      rowSelection: selectionHook.getRowSelectionState(),
+    },
+    onSortingChange: setSorting,
+    onColumnFiltersChange: setColumnFilters,
+    // FIXED: Add onColumnOrderChange handler
+    onColumnOrderChange: setColumnOrder,
+    onRowSelectionChange: selectionHook.onRowSelectionChange,
+    initialState: {
+      sorting: [],
+    },
+    meta: {
+      updateData: (rowIndex: number, columnId: string, value: unknown) => {
+        console.log("Update data:", { rowIndex, columnId, value });
+      },
+    },
+  });
+
+  // Handle sorting status indicator
+  useEffect(() => {
+    const sortingState = table.getState().sorting;
+    if (sortingState.length > 0) {
+      setStatus({ isWorking: true, message: "Sorting courses..." });
+
+      const timer = setTimeout(() => {
+        setStatus({ isWorking: false, message: "" });
+      }, 300);
+
+      return () => clearTimeout(timer);
+    }
+  }, [table.getState().sorting, setStatus]);
+
+  // Force table re-render when selections change
+  useEffect(() => {
+    // This will force the table to re-render when selection state changes
+    table.resetRowSelection();
+  }, [planState.selections, table]);
+
+  // Handle scroll events to show/hide scroll-to-top button
+  const handleScroll = (scrollTop: number) => {
+    setShowScrollTop(scrollTop > 200);
+  };
+
+  // Show loading state while catalogs are loading
+  if (loading) {
+    return (
+      <div className="h-full w-full flex items-center justify-center">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-orange-500 mx-auto mb-4"></div>
+          <p className="text-gray-600">Loading training courses...</p>
+        </div>
+      </div>
+    );
+  }
+
+  // Show error state if catalog loading failed
+  if (error) {
+    return (
+      <div className="h-full w-full flex items-center justify-center">
+        <div className="text-center max-w-md mx-auto p-6">
+          <div className="text-red-600 mb-4">
+            <svg
+              className="w-12 h-12 mx-auto"
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={2}
+                d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
+              />
+            </svg>
+          </div>
+          <h3 className="text-lg font-semibold text-gray-900 mb-2">
+            Failed to Load Courses
+          </h3>
+          <p className="text-gray-600 mb-4">{error}</p>
+          <p className="text-sm text-gray-500">
+            Please refresh the page to try again.
+          </p>
+        </div>
+      </div>
+    );
+  }
+
+  // Calculate enhanced footer values
+  const totalCourses = courses?.length || 0;
+  const filteredCourses = table.getFilteredRowModel().rows.length;
+  const teamMemberCount = planState.teamMembers.length;
+  const hasFilters = columnFilters.length > 0;
+
+  // Calculate total selections across all team members
+  const selectedCourses = Object.values(planState.selections).reduce(
+    (total, memberSelections) => {
+      return (
+        total +
+        Object.values(memberSelections).reduce(
+          (memberTotal, catalogCourses) => memberTotal + catalogCourses.length,
+          0,
+        )
+      );
+    },
+    0,
+  );
+
+  // Generate enhanced footer message
+  const footerMessage = generateEnhancedPlanFooterMessage(
+    filteredCourses,
+    totalCourses,
+    teamMemberCount,
+    selectedCourses,
+    planState.catalogs.length,
+    hasFilters,
+  );
+
+  // Empty state message
+  const emptyStateMessage =
+    !courses || courses.length === 0
+      ? "No courses available. Please check that catalogs are loaded."
+      : "No courses available for team assignment";
+
+  return (
+    <div id="monotable" className="h-full w-full relative">
+      <BaseTable2
+        ref={tableRef}
+        table={table}
+        onScroll={handleScroll}
+        containerHeight="100%"
+        headerClassName="bg-gray-600 border-b border-gray-500"
+        bodyClassName="divide-y divide-gray-200"
+        emptyStateMessage={emptyStateMessage}
+        loadingState={loading}
+        footerMessage={footerMessage}
+        enableAlternatingRows={true}
+      />
+
+      {/* Scroll to Top Button */}
+      {showScrollTop && (
+        <button
+          onClick={() => tableRef.current?.scrollToTop()}
+          className="fixed bottom-6 right-6 bg-orange-500 hover:bg-orange-600 text-white p-3 rounded-full shadow-lg transition-all duration-200 z-50"
+          title="Scroll to top"
+          aria-label="Scroll to top of table"
+        >
+          <ChevronUp className="w-5 h-5" />
+        </button>
+      )}
+    </div>
+  );
+};
+
+export default MonoTable;

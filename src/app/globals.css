@@ -1,0 +1,238 @@
+@import "tailwindcss";
+
+/* CSS Custom Properties for Splunk Brand Colors */
+:root {
+    --background: #ffffff;
+    --foreground: #171717;
+
+    /* Splunk Brand Colors */
+    --splunk-pink: #e20082;
+    --splunk-orange: #f99d1c;
+    --splunk-blue: #0070f3;
+
+    /* Splunk Gray Scale */
+    --splunk-gray-darkest: #0c1724;
+    --splunk-gray-darker: #363c44;
+    --splunk-gray-dark: #969daa;
+    --splunk-gray-light: #d5dce5;
+    --splunk-gray-lightest: #f0f3f7;
+
+    /* Font families */
+    --font-sans: var(--font-geist-sans);
+    --font-mono: var(--font-geist-mono);
+
+    /* Brand gradients */
+    --gradient-splunk-primary: linear-gradient(
+        135deg,
+        #f99d1c 0%,
+        #e20082 100%
+    );
+    --gradient-splunk-hero: linear-gradient(
+        135deg,
+        #4c1d95 0%,
+        #1f2937 50%,
+        #0c1724 100%
+    );
+}
+
+@theme inline {
+    --color-background: var(--background);
+    --color-foreground: var(--foreground);
+    --font-sans: var(--font-sans);
+    --font-mono: var(--font-mono);
+}
+
+@media (prefers-color-scheme: dark) {
+    :root {
+        --background: #0a0a0a;
+        --foreground: #ededed;
+    }
+}
+
+body {
+    background: var(--background);
+    color: var(--foreground);
+    font-family: var(--font-sans), Arial, Helvetica, sans-serif;
+    font-weight: 400;
+    line-height: 1.6;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+}
+
+/* Hide spinners for standard number inputs */
+/* Chrome, Safari, Edge, Opera */
+input::-webkit-outer-spin-button,
+input::-webkit-inner-spin-button {
+    -webkit-appearance: none;
+    margin: 0;
+}
+
+/* Firefox */
+input[type="number"] {
+    -moz-appearance: textfield;
+}
+
+/* Enhanced focus styles for accessibility */
+*:focus-visible {
+    outline: 2px solid var(--splunk-pink);
+    outline-offset: 2px;
+    border-radius: 4px;
+}
+
+/* Remove default focus for mouse users */
+*:focus:not(:focus-visible) {
+    outline: none;
+}
+
+/* Smooth scrolling */
+html {
+    scroll-behavior: smooth;
+}
+
+/* Selection colors */
+::selection {
+    background-color: var(--splunk-pink);
+    color: white;
+}
+
+::-moz-selection {
+    background-color: var(--splunk-pink);
+    color: white;
+}
+
+/* FIXED: Language color classes to override any CSS conflicts */
+.language-violet {
+    background-color: #ede9fe !important;
+    color: #5b21b6 !important;
+}
+
+.language-indigo {
+    background-color: #e0e7ff !important;
+    color: #3730a3 !important;
+}
+
+.language-purple {
+    background-color: #f3e8ff !important;
+    color: #6b21a8 !important;
+}
+
+.language-pink {
+    background-color: #fce7f3 !important;
+    color: #be185d !important;
+}
+
+.language-rose {
+    background-color: #fff1f2 !important;
+    color: #be123c !important;
+}
+
+.language-fuchsia {
+    background-color: #fdf4ff !important;
+    color: #a21caf !important;
+}
+
+.language-blue {
+    background-color: #dbeafe !important;
+    color: #1d4ed8 !important;
+}
+
+.language-cyan {
+    background-color: #cffafe !important;
+    color: #0891b2 !important;
+}
+
+.language-default {
+    background-color: #f1f5f9 !important;
+    color: #475569 !important;
+}
+
+/* Utility classes for consistent animations */
+.animate-fadeIn {
+    animation: fadeIn 0.5s ease-in-out;
+}
+
+.animate-slideUp {
+    animation: slideUp 0.3s ease-out;
+}
+
+.animate-scaleIn {
+    animation: scaleIn 0.2s ease-out;
+}
+
+@keyframes fadeIn {
+    from {
+        opacity: 0;
+    }
+    to {
+        opacity: 1;
+    }
+}
+
+@keyframes slideUp {
+    from {
+        transform: translateY(10px);
+        opacity: 0;
+    }
+    to {
+        transform: translateY(0);
+        opacity: 1;
+    }
+}
+
+@keyframes scaleIn {
+    from {
+        transform: scale(0.9);
+        opacity: 0;
+    }
+    to {
+        transform: scale(1);
+        opacity: 1;
+    }
+}
+
+/* Loading spinner with brand colors */
+.spinner-brand {
+    border: 2px solid var(--splunk-gray-light);
+    border-top: 2px solid var(--splunk-pink);
+    border-radius: 50%;
+    animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+    0% {
+        transform: rotate(0deg);
+    }
+    100% {
+        transform: rotate(360deg);
+    }
+}
+
+/* Debug border system - simple toggle */
+/* Debug ON: add .debug-on to parent to enable ALL debug borders */
+.debug-on .debug-border-parent,
+.debug-on .debug-border-child,
+.debug-on .debug-border-sub {
+    /* border-width: 4px !important; */
+}
+
+/* Debug OFF: add .debug-off to parent to disable ALL debug borders */
+.debug-off .debug-border-parent,
+.debug-off .debug-border-child,
+.debug-off .debug-border-sub {
+    border: 0px solid transparent !important;
+}
+
+.debug-border-parent {
+    border: 4px solid #facc15 !important; /* yellow-400 */
+    box-sizing: border-box !important;
+}
+
+.debug-border-child {
+    border: 4px solid #ef4444 !important; /* red-500 */
+    box-sizing: border-box !important;
+}
+
+.debug-border-sub {
+    border: 4px solid #84cc16 !important; /* lime-500 */
+    box-sizing: border-box !important;
+}

@@ -1,0 +1,69 @@
+import React, { useEffect } from "react";
+import { useAtom } from "jotai";
+import { atom } from "jotai";
+import { Course } from "@/types/types";
+import { setWorkingAtom } from "@/atoms/globalAtoms";
+import { loadCoursesFromCSV, CATALOG_CONFIGS } from "@/utils/catalogLoader";
+
+// Shared atoms for catalog state
+export const catalogDataAtom = atom<Course[]>([]);
+export const catalogLoadingAtom = atom<boolean>(false);
+export const catalogErrorAtom = atom<Error | null>(null);
+
+interface CatalogBaseProps {
+  children: (data: {
+    courses: Course[];
+    isLoading: boolean;
+    error: Error | null;
+    refetch: () => void;
+  }) => React.ReactNode;
+}
+
+const CatalogBase: React.FC<CatalogBaseProps> = ({ children }) => {
+  const [courses, setCourses] = useAtom(catalogDataAtom);
+  const [isLoading, setIsLoading] = useAtom(catalogLoadingAtom);
+  const [error, setError] = useAtom(catalogErrorAtom);
+  const [, setWorking] = useAtom(setWorkingAtom);
+
+  const loadCourses = async () => {
+    if (isLoading) return;
+
+    setIsLoading(true);
+    setError(null);
+    setWorking({ isWorking: true, message: "Loading catalog courses" });
+
+    try {
+      // Use the default catalog (first one in the config)
+      const defaultCatalog = CATALOG_CONFIGS[0];
+      if (!defaultCatalog) {
+        throw new Error("No catalog configuration found");
+      }
+
+      const loadedCourses = await loadCoursesFromCSV(defaultCatalog.csvPath);
+      setCourses(loadedCourses);
+    } catch (err) {
+      const errorMessage =
+        err instanceof Error ? err : new Error("Unknown error occurred");
+      setError(errorMessage);
+      setCourses([]);
+    } finally {
+      setIsLoading(false);
+      setWorking({ isWorking: false, message: "" });
+    }
+  };
+
+  const refetch = () => {
+    loadCourses();
+  };
+
+  // Load courses on mount if not already loaded
+  useEffect(() => {
+    if (courses.length === 0 && !isLoading && !error) {
+      loadCourses();
+    }
+  }, []);
+
+  return <>{children({ courses, isLoading, error, refetch })}</>;
+};
+
+export default CatalogBase;

@@ -1,0 +1,1071 @@
+import { atom } from "jotai";
+import { atomWithStorage } from "jotai/utils";
+import { Catalog, Status, Course, PlanState, Person } from "@/types/types";
+import { PlanAction, HistoryState } from "@/types/actions";
+import { DEFAULT_PLAN_TITLE, DEFAULT_TEAM_NAMES, DEFAULT_CATALOG } from "@/utils/constants";
+
+// Helper to generate random ID with prefix
+const generateRandomId = (prefix: string): string => {
+  return `${prefix}-${Math.random().toString(36).substr(2, 9)}`;
+};
+
+// Helper to generate action ID
+const generateActionId = (): string => {
+  return `action-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+};
+
+// Global working indicator state
+export const workingAtom = atom<boolean>(false);
+export const workingMessageAtom = atom<string>("");
+
+// Catalog state atoms - simple data storage only
+export const catalogsAtom = atom<Catalog[]>([]);
+export const catalogsLoadingAtom = atom<boolean>(false);
+export const catalogsErrorAtom = atom<string | null>(null);
+
+// Planner-specific atoms as per PRD data flow requirements
+export const plannerCatalogsAtom = atom<string[]>([DEFAULT_CATALOG]); // Default to hardcoded catalog for MVP
+
+// PlanCalculator state atoms
+export const isEditingBudgetAtom = atom<boolean>(false);
+export const budgetInputAtom = atom<string>("");
+export const isCreditsUnitModeAtom = atom<boolean>(true); // Start with TUs as requested
+
+// Team editing state atoms
+export const editingTeamMemberAtom = atom<number | null>(null);
+export const editingTeamMemberValueAtom = atom<string>("");
+
+// Table scroll reference atom for scroll-to-top functionality
+export const tableScrollRefAtom = atom<{ scrollToOffset: (offset: number) => void } | null>(null);
+
+// History state with persistence - survives browser refreshes
+const initialHistoryState: HistoryState = {
+  undoStack: [],
+  redoStack: [],
+  maxHistorySize: 100, // Limit history to prevent memory issues
+};
+
+export const historyStateAtom = atomWithStorage<HistoryState>("planHistory", initialHistoryState);
+
+// Helper function to add course selection for a person in a specific catalog
+export const addCourseSelection = (
+  selections: Record<string, Record<string, string[]>>, 
+  personId: string, 
+  catalogId: string, 
+  courseId: string
+): Record<string, Record<string, string[]>> => {
+  const personSelections = selections[personId] || {};
+  const catalogCourses = personSelections[catalogId] || [];
+  
+  if (!catalogCourses.includes(courseId)) {
+    return {
+      ...selections,
+      [personId]: {
+        ...personSelections,
+        [catalogId]: [...catalogCourses, courseId],
+      },
+    };
+  }
+  
+  return selections;
+};
+
+// Helper function to remove course selection for a person in a specific catalog
+export const removeCourseSelection = (
+  selections: Record<string, Record<string, string[]>>, 
+  personId: string, 
+  catalogId: string, 
+  courseId: string
+): Record<string, Record<string, string[]>> => {
+  const personSelections = selections[personId] || {};
+  const catalogCourses = personSelections[catalogId] || [];
+  
+  const updatedCourses = catalogCourses.filter(id => id !== courseId);
+  
+  if (updatedCourses.length === 0) {
+    // Remove empty catalog
+    const { [catalogId]: removed, ...restCatalogs } = personSelections;
+    
+    if (Object.keys(restCatalogs).length === 0) {
+      // Remove empty person
+      const { [personId]: removedPerson, ...restSelections } = selections;
+      return restSelections;
+    }
+    
+    return {
+      ...selections,
+      [personId]: restCatalogs,
+    };
+  }
+  
+  return {
+    ...selections,
+    [personId]: {
+      ...personSelections,
+      [catalogId]: updatedCourses,
+    },
+  };
+};
+
+// Helper function to check if person has course selected in a specific catalog
+export const hasSelectionForCourse = (
+  selections: Record<string, Record<string, string[]>>, 
+  personId: string, 
+  catalogId: string, 
+  courseId: string
+): boolean => {
+  const personSelections = selections[personId] || {};
+  const catalogCourses = personSelections[catalogId] || [];
+  return catalogCourses.includes(courseId);
+};
+
+// Create initial plan state with random IDs (consistent format)
+const createInitialPlanState = (): PlanState => {
+  const dynamicTeamId = generateRandomId('team');
+  
+  const defaultMember: Person = {
+    id: generateRandomId('person'),
+    name: DEFAULT_TEAM_NAMES[0],
+    teamId: dynamicTeamId,
+  };
+
+  return {
+    id: generateRandomId('plan'),
+    title: DEFAULT_PLAN_TITLE,
+    notes: "",
+    catalogs: [DEFAULT_CATALOG],
+    teams: [dynamicTeamId],
+    teamMembers: [defaultMember],
+    selections: {},
+    budget: null,
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+  };
+};
+
+// Global plan state atom - localStorage persistence
+export const planStateAtom = atomWithStorage<PlanState>("planState", createInitialPlanState());
+
+// Derived atoms for computed values
+export const catalogsCountAtom = atom((get) => get(catalogsAtom).length);
+export const totalCoursesAtom = atom((get) =>
+  get(catalogsAtom).reduce(
+    (total, catalog) => total + (catalog.courseCount || 0),
+    0,
+  ),
+);
+
+// Derived atom to get all courses from planner-selected catalogs
+export const plannerCoursesAtom = atom((get) => {
+  const catalogs = get(catalogsAtom);
+  const planState = get(planStateAtom);
+  
+  const courses: Course[] = [];
+  planState.catalogs.forEach(catalogId => {
+    const catalog = catalogs.find(c => c.id === catalogId);
+    if (catalog && catalog.courses) {
+      courses.push(...catalog.courses);
+    }
+  });
+  
+  return courses;
+});
+
+// Derived atom for plan total calculation
+export const planTotalAtom = atom((get) => {
+  const courses = get(plannerCoursesAtom);
+  const planState = get(planStateAtom);
+  
+  let total = 0;
+  Object.values(planState.selections).forEach(personSelections => {
+    Object.values(personSelections).forEach(courseIds => {
+      courseIds.forEach(courseId => {
+        const course = courses.find(c => c.ID === courseId);
+        if (course) {
+          total += course.Price;
+        }
+      });
+    });
+  });
+  
+  return total;
+});
+
+// Derived atom for cost per member calculation - FIXED to use person IDs
+export const planCostPerMemberAtom = atom((get) => {
+  const courses = get(plannerCoursesAtom);
+  const planState = get(planStateAtom);
+  const costPerMember: Record<string, number> = {};
+  
+  // Initialize all team members with 0 cost using person ID as key
+  planState.teamMembers.forEach(member => {
+    costPerMember[member.id] = 0;
+  });
+  
+  // Calculate cost for each member based on selections using person ID
+  Object.entries(planState.selections).forEach(([personId, personSelections]) => {
+    let memberCost = 0;
+    Object.values(personSelections).forEach(courseIds => {
+      courseIds.forEach(courseId => {
+        const course = courses.find(c => c.ID === courseId);
+        if (course) {
+          memberCost += course.Price;
+        }
+      });
+    });
+    
+    costPerMember[personId] = memberCost;
+  });
+  
+  return costPerMember;
+});
+
+// Derived atom for selected courses count
+export const planSelectedCoursesAtom = atom((get) => {
+  const planState = get(planStateAtom);
+  return Object.values(planState.selections).reduce((total, personSelections) => {
+    return total + Object.values(personSelections).reduce((memberTotal, courseIds) => {
+      return memberTotal + courseIds.length;
+    }, 0);
+  }, 0);
+});
+
+// Derived atoms for undo/redo capabilities
+export const canUndoAtom = atom((get) => {
+  const history = get(historyStateAtom);
+  return history.undoStack.length > 0;
+});
+
+export const canRedoAtom = atom((get) => {
+  const history = get(historyStateAtom);
+  return history.redoStack.length > 0;
+});
+
+// Working indicator helper - simplified
+export const setStatusAtom = atom(
+  null,
+  (get, set, { isWorking, message }: Status) => {
+    set(workingAtom, isWorking);
+    set(workingMessageAtom, message || "");
+  },
+);
+
+// Helper to scroll table to top
+const scrollTableToTop = (get: any, set: any) => {
+  const tableRef = get(tableScrollRefAtom);
+  if (tableRef && tableRef.scrollToOffset) {
+    tableRef.scrollToOffset(0);
+  }
+};
+
+// Helper to add action to history
+const addToHistory = (get: any, set: any, action: PlanAction) => {
+  const currentHistory = get(historyStateAtom);
+  
+  // Add to undo stack and clear redo stack
+  const newUndoStack = [...currentHistory.undoStack, action];
+  
+  // Limit history size
+  const trimmedUndoStack = newUndoStack.length > currentHistory.maxHistorySize
+    ? newUndoStack.slice(-currentHistory.maxHistorySize)
+    : newUndoStack;
+  
+  set(historyStateAtom, {
+    ...currentHistory,
+    undoStack: trimmedUndoStack,
+    redoStack: [], // Clear redo stack on new action
+  });
+};
+
+// Action reversal functions
+const reverseAction = (action: PlanAction): PlanAction => {
+  const baseReverse = {
+    timestamp: new Date().toISOString(),
+    id: generateActionId(),
+  };
+
+  switch (action.type) {
+    case "ADD_TEAM_MEMBER":
+      return {
+        ...baseReverse,
+        type: "REMOVE_TEAM_MEMBER",
+        payload: {
+          member: action.payload.member,
+          index: action.payload.index,
+          selections: {}, // Will be filled when applied
+        },
+      };
+    
+    case "REMOVE_TEAM_MEMBER":
+      return {
+        ...baseReverse,
+        type: "ADD_TEAM_MEMBER",
+        payload: {
+          member: action.payload.member,
+          index: action.payload.index,
+        },
+      };
+    
+    case "UPDATE_TEAM_MEMBER":
+      return {
+        ...baseReverse,
+        type: "UPDATE_TEAM_MEMBER",
+        payload: {
+          index: action.payload.index,
+          oldMember: action.payload.newMember,
+          newMember: action.payload.oldMember,
+        },
+      };
+    
+    case "TOGGLE_COURSE_SELECTION":
+      return {
+        ...baseReverse,
+        type: "TOGGLE_COURSE_SELECTION",
+        payload: {
+          personId: action.payload.personId,
+          catalogId: action.payload.catalogId,
+          courseId: action.payload.courseId,
+          wasSelected: !action.payload.wasSelected,
+        },
+      };
+    
+    case "UPDATE_TITLE":
+      return {
+        ...baseReverse,
+        type: "UPDATE_TITLE",
+        payload: {
+          oldTitle: action.payload.newTitle,
+          newTitle: action.payload.oldTitle,
+        },
+      };
+    
+    case "UPDATE_NOTES":
+      return {
+        ...baseReverse,
+        type: "UPDATE_NOTES",
+        payload: {
+          oldNotes: action.payload.newNotes,
+          newNotes: action.payload.oldNotes,
+        },
+      };
+    
+    case "SET_BUDGET":
+      return {
+        ...baseReverse,
+        type: "SET_BUDGET",
+        payload: {
+          oldBudget: action.payload.newBudget,
+          newBudget: action.payload.oldBudget,
+        },
+      };
+    
+    case "RESET_SELECTIONS":
+      return {
+        ...baseReverse,
+        type: "RESET_SELECTIONS",
+        payload: {
+          oldSelections: action.payload.oldSelections,
+        },
+      };
+    
+    case "IMPORT_PLAN":
+      return {
+        ...baseReverse,
+        type: "IMPORT_PLAN",
+        payload: {
+          oldPlanState: action.payload.newPlanState,
+          newPlanState: action.payload.oldPlanState,
+        },
+      };
+    
+    case "TOGGLE_CREDITS_MODE":
+      return {
+        ...baseReverse,
+        type: "TOGGLE_CREDITS_MODE",
+        payload: {
+          oldMode: action.payload.newMode,
+          newMode: action.payload.oldMode,
+        },
+      };
+    
+    default:
+      throw new Error(`Unknown action type: ${(action as any).type}`);
+  }
+};
+
+// Plan state update helpers
+export const updatePlanStateAtom = atom(
+  null,
+  (get, set, updates: Partial<PlanState>) => {
+    const currentState = get(planStateAtom);
+    const updatedState = {
+      ...currentState,
+      ...updates,
+      updatedAt: new Date().toISOString(),
+    };
+    set(planStateAtom, updatedState);
+    
+    // Update status to show operation completed
+    set(setStatusAtom, { isWorking: false, message: "Plan updated" });
+    
+    // Clear status after brief delay
+    setTimeout(() => {
+      set(setStatusAtom, { isWorking: false, message: "" });
+    }, 1000);
+  },
+);
+
+// Action execution atom - applies actions and records them in history
+export const executeActionAtom = atom(
+  null,
+  (get, set, action: PlanAction) => {
+    const currentState = get(planStateAtom);
+    
+    // Apply the action to state
+    let newState = { ...currentState };
+    
+    switch (action.type) {
+      case "ADD_TEAM_MEMBER":
+        newState.teamMembers = [...currentState.teamMembers];
+        newState.teamMembers.splice(action.payload.index, 0, action.payload.member);
+        break;
+      
+      case "REMOVE_TEAM_MEMBER":
+        newState.teamMembers = currentState.teamMembers.filter((_, i) => i !== action.payload.index);
+        // Remove selections for deleted member
+        const updatedSelections = { ...currentState.selections };
+        delete updatedSelections[action.payload.member.id];
+        newState.selections = updatedSelections;
+        break;
+      
+      case "UPDATE_TEAM_MEMBER":
+        newState.teamMembers = [...currentState.teamMembers];
+        newState.teamMembers[action.payload.index] = action.payload.newMember;
+        break;
+      
+      case "TOGGLE_COURSE_SELECTION":
+        if (action.payload.wasSelected) {
+          // Remove selection
+          newState.selections = removeCourseSelection(
+            currentState.selections,
+            action.payload.personId,
+            action.payload.catalogId,
+            action.payload.courseId
+          );
+        } else {
+          // Add selection
+          newState.selections = addCourseSelection(
+            currentState.selections,
+            action.payload.personId,
+            action.payload.catalogId,
+            action.payload.courseId
+          );
+        }
+        break;
+      
+      case "UPDATE_TITLE":
+        newState.title = action.payload.newTitle;
+        break;
+      
+      case "UPDATE_NOTES":
+        newState.notes = action.payload.newNotes;
+        break;
+      
+      case "SET_BUDGET":
+        newState.budget = action.payload.newBudget;
+        break;
+      
+      case "RESET_SELECTIONS":
+        newState.selections = action.payload.oldSelections;
+        break;
+      
+      case "IMPORT_PLAN":
+        newState = action.payload.newPlanState;
+        break;
+      
+      case "TOGGLE_CREDITS_MODE":
+        // This doesn't affect plan state, handle in calculator atom
+        break;
+      
+      default:
+        console.warn(`Unknown action type: ${(action as any).type}`);
+        return;
+    }
+    
+    // Update plan state
+    newState.updatedAt = new Date().toISOString();
+    set(planStateAtom, newState);
+    
+    // Add to history
+    addToHistory(get, set, action);
+  },
+);
+
+// Undo atom
+export const undoAtom = atom(
+  null,
+  (get, set) => {
+    const history = get(historyStateAtom);
+    
+    if (history.undoStack.length === 0) {
+      return;
+    }
+    
+    set(setStatusAtom, { isWorking: true, message: "Undoing action..." });
+    
+    // Get last action from undo stack
+    const lastAction = history.undoStack[history.undoStack.length - 1];
+    const newUndoStack = history.undoStack.slice(0, -1);
+    
+    // Create reverse action and add to redo stack
+    const reverseActionObj = reverseAction(lastAction);
+    const newRedoStack = [...history.redoStack, lastAction];
+    
+    // Update history
+    set(historyStateAtom, {
+      ...history,
+      undoStack: newUndoStack,
+      redoStack: newRedoStack,
+    });
+    
+    // Execute reverse action (without adding to history)
+    const currentState = get(planStateAtom);
+    let newState = { ...currentState };
+    
+    // Apply reverse action logic (similar to executeActionAtom but without history)
+    switch (reverseActionObj.type) {
+      case "ADD_TEAM_MEMBER":
+        newState.teamMembers = [...currentState.teamMembers];
+        newState.teamMembers.splice(reverseActionObj.payload.index, 0, reverseActionObj.payload.member);
+        break;
+      
+      case "REMOVE_TEAM_MEMBER":
+        newState.teamMembers = currentState.teamMembers.filter((_, i) => i !== reverseActionObj.payload.index);
+        const updatedSelections = { ...currentState.selections };
+        delete updatedSelections[reverseActionObj.payload.member.id];
+        newState.selections = updatedSelections;
+        break;
+      
+      case "UPDATE_TEAM_MEMBER":
+        newState.teamMembers = [...currentState.teamMembers];
+        newState.teamMembers[reverseActionObj.payload.index] = reverseActionObj.payload.newMember;
+        break;
+      
+      case "TOGGLE_COURSE_SELECTION":
+        if (reverseActionObj.payload.wasSelected) {
+          newState.selections = removeCourseSelection(
+            currentState.selections,
+            reverseActionObj.payload.personId,
+            reverseActionObj.payload.catalogId,
+            reverseActionObj.payload.courseId
+          );
+        } else {
+          newState.selections = addCourseSelection(
+            currentState.selections,
+            reverseActionObj.payload.personId,
+            reverseActionObj.payload.catalogId,
+            reverseActionObj.payload.courseId
+          );
+        }
+        break;
+      
+      case "UPDATE_TITLE":
+        newState.title = reverseActionObj.payload.newTitle;
+        break;
+      
+      case "UPDATE_NOTES":
+        newState.notes = reverseActionObj.payload.newNotes;
+        break;
+      
+      case "SET_BUDGET":
+        newState.budget = reverseActionObj.payload.newBudget;
+        break;
+      
+      case "RESET_SELECTIONS":
+        newState.selections = reverseActionObj.payload.oldSelections;
+        break;
+      
+      case "IMPORT_PLAN":
+        newState = reverseActionObj.payload.newPlanState;
+        break;
+      
+      case "TOGGLE_CREDITS_MODE":
+        // Handle in calculator atom
+        set(isCreditsUnitModeAtom, reverseActionObj.payload.newMode);
+        break;
+      
+      default:
+        console.warn(`Unknown reverse action type: ${(reverseActionObj as any).type}`);
+        return;
+    }
+    
+    newState.updatedAt = new Date().toISOString();
+    set(planStateAtom, newState);
+    
+    setTimeout(() => {
+      set(setStatusAtom, { isWorking: false, message: "Action undone!" });
+      setTimeout(() => {
+        set(setStatusAtom, { isWorking: false, message: "" });
+      }, 1500);
+    }, 500);
+  },
+);
+
+// Redo atom
+export const redoAtom = atom(
+  null,
+  (get, set) => {
+    const history = get(historyStateAtom);
+    
+    if (history.redoStack.length === 0) {
+      return;
+    }
+    
+    set(setStatusAtom, { isWorking: true, message: "Redoing action..." });
+    
+    // Get last action from redo stack
+    const actionToRedo = history.redoStack[history.redoStack.length - 1];
+    const newRedoStack = history.redoStack.slice(0, -1);
+    const newUndoStack = [...history.undoStack, actionToRedo];
+    
+    // Update history
+    set(historyStateAtom, {
+      ...history,
+      undoStack: newUndoStack,
+      redoStack: newRedoStack,
+    });
+    
+    // Re-execute the action
+    const currentState = get(planStateAtom);
+    let newState = { ...currentState };
+    
+    switch (actionToRedo.type) {
+      case "ADD_TEAM_MEMBER":
+        newState.teamMembers = [...currentState.teamMembers];
+        newState.teamMembers.splice(actionToRedo.payload.index, 0, actionToRedo.payload.member);
+        break;
+      
+      case "REMOVE_TEAM_MEMBER":
+        newState.teamMembers = currentState.teamMembers.filter((_, i) => i !== actionToRedo.payload.index);
+        const updatedSelections = { ...currentState.selections };
+        delete updatedSelections[actionToRedo.payload.member.id];
+        newState.selections = updatedSelections;
+        break;
+      
+      case "UPDATE_TEAM_MEMBER":
+        newState.teamMembers = [...currentState.teamMembers];
+        newState.teamMembers[actionToRedo.payload.index] = actionToRedo.payload.newMember;
+        break;
+      
+      case "TOGGLE_COURSE_SELECTION":
+        if (actionToRedo.payload.wasSelected) {
+          newState.selections = removeCourseSelection(
+            currentState.selections,
+            actionToRedo.payload.personId,
+            actionToRedo.payload.catalogId,
+            actionToRedo.payload.courseId
+          );
+        } else {
+          newState.selections = addCourseSelection(
+            currentState.selections,
+            actionToRedo.payload.personId,
+            actionToRedo.payload.catalogId,
+            actionToRedo.payload.courseId
+          );
+        }
+        break;
+      
+      case "UPDATE_TITLE":
+        newState.title = actionToRedo.payload.newTitle;
+        break;
+      
+      case "UPDATE_NOTES":
+        newState.notes = actionToRedo.payload.newNotes;
+        break;
+      
+      case "SET_BUDGET":
+        newState.budget = actionToRedo.payload.newBudget;
+        break;
+      
+      case "RESET_SELECTIONS":
+        newState.selections = actionToRedo.payload.oldSelections;
+        break;
+      
+      case "IMPORT_PLAN":
+        newState = actionToRedo.payload.newPlanState;
+        break;
+      
+      case "TOGGLE_CREDITS_MODE":
+        set(isCreditsUnitModeAtom, actionToRedo.payload.newMode);
+        break;
+      
+      default:
+        console.warn(`Unknown redo action type: ${(actionToRedo as any).type}`);
+        return;
+    }
+    
+    newState.updatedAt = new Date().toISOString();
+    set(planStateAtom, newState);
+    
+    setTimeout(() => {
+      set(setStatusAtom, { isWorking: false, message: "Action redone!" });
+      setTimeout(() => {
+        set(setStatusAtom, { isWorking: false, message: "" });
+      }, 1500);
+    }, 500);
+  },
+);
+
+// Budget management action atoms - updated to use history
+export const setBudgetAtom = atom(
+  null,
+  (get, set, budget: number | null) => {
+    set(setStatusAtom, { isWorking: true, message: "Updating budget..." });
+    
+    const currentState = get(planStateAtom);
+    
+    // Create action
+    const action: PlanAction = {
+      type: "SET_BUDGET",
+      timestamp: new Date().toISOString(),
+      id: generateActionId(),
+      payload: {
+        oldBudget: currentState.budget,
+        newBudget: budget,
+      },
+    };
+    
+    // Execute action
+    set(executeActionAtom, action);
+    
+    // Clear editing state
+    set(isEditingBudgetAtom, false);
+    set(budgetInputAtom, "");
+    
+    set(setStatusAtom, { isWorking: false, message: "" });
+  },
+);
+
+// Team member management action atoms - updated to use history
+export const addTeamMemberAtom = atom(
+  null,
+  (get, set, newMember: Person) => {
+    set(setStatusAtom, { isWorking: true, message: "Adding team member..." });
+    
+    const currentState = get(planStateAtom);
+    const currentTeamId = currentState.teams[0]; // Use first (and currently only) team
+    
+    const memberWithId = {
+      ...newMember,
+      id: newMember.id || generateRandomId('person'),
+      teamId: currentTeamId,
+    };
+    
+    const action: PlanAction = {
+      type: "ADD_TEAM_MEMBER",
+      timestamp: new Date().toISOString(),
+      id: generateActionId(),
+      payload: {
+        member: memberWithId,
+        index: currentState.teamMembers.length, // Add at end
+      },
+    };
+    
+    set(executeActionAtom, action);
+  },
+);
+
+export const updateTeamMemberAtom = atom(
+  null,
+  (get, set, { index, updates }: { index: number; updates: Partial<Person> }) => {
+    set(setStatusAtom, { isWorking: true, message: "Updating team member..." });
+    
+    const currentState = get(planStateAtom);
+    const oldMember = currentState.teamMembers[index];
+    const newMember = { ...oldMember, ...updates };
+    
+    const action: PlanAction = {
+      type: "UPDATE_TEAM_MEMBER",
+      timestamp: new Date().toISOString(),
+      id: generateActionId(),
+      payload: {
+        index,
+        oldMember,
+        newMember,
+      },
+    };
+    
+    set(executeActionAtom, action);
+    
+    // Clear editing state
+    set(editingTeamMemberAtom, null);
+    set(editingTeamMemberValueAtom, "");
+  },
+);
+
+export const deleteTeamMemberAtom = atom(
+  null,
+  (get, set, index: number) => {
+    set(setStatusAtom, { isWorking: true, message: "Removing team member..." });
+    
+    const currentState = get(planStateAtom);
+    const memberToDelete = currentState.teamMembers[index];
+    
+    const action: PlanAction = {
+      type: "REMOVE_TEAM_MEMBER",
+      timestamp: new Date().toISOString(),
+      id: generateActionId(),
+      payload: {
+        member: memberToDelete,
+        index,
+        selections: currentState.selections[memberToDelete.id] || {},
+      },
+    };
+    
+    set(executeActionAtom, action);
+    
+    // Clear editing state if needed
+    const currentEditing = get(editingTeamMemberAtom);
+    if (currentEditing === index) {
+      set(editingTeamMemberAtom, null);
+      set(editingTeamMemberValueAtom, "");
+    } else if (currentEditing !== null && currentEditing > index) {
+      set(editingTeamMemberAtom, currentEditing - 1);
+    }
+  },
+);
+
+// Helper to check if current plan has any changes (non-default state)
+const hasNonDefaultPlanState = (planState: PlanState): boolean => {
+  const hasCustomTitle = planState.title !== DEFAULT_PLAN_TITLE;
+  const hasCustomNotes = Boolean(planState.notes && planState.notes.trim());
+  const hasCustomTeamMembers = planState.teamMembers.length > 1 || 
+    (planState.teamMembers.length === 1 && planState.teamMembers[0].name !== DEFAULT_TEAM_NAMES[0]);
+  const hasCourseSelections = Object.keys(planState.selections).length > 0;
+  const hasBudget = planState.budget !== null;
+
+  return hasCustomTitle || hasCustomNotes || hasCustomTeamMembers || hasCourseSelections || hasBudget;
+};
+
+// Create new plan action atom - updated to use history and check for changes
+export const createNewPlanAtom = atom(
+  null,
+  (get, set) => {
+    const currentState = get(planStateAtom);
+    
+    // Check if current plan has changes
+    if (!hasNonDefaultPlanState(currentState)) {
+      // No changes, just create new plan without confirmation
+      set(setStatusAtom, { isWorking: true, message: "Creating new plan..." });
+      
+      const newPlanState = createInitialPlanState();
+      
+      const action: PlanAction = {
+        type: "IMPORT_PLAN",
+        timestamp: new Date().toISOString(),
+        id: generateActionId(),
+        payload: {
+          oldPlanState: currentState,
+          newPlanState,
+        },
+      };
+      
+      set(executeActionAtom, action);
+      
+      // Reset other related state
+      set(isEditingBudgetAtom, false);
+      set(budgetInputAtom, "");
+      set(editingTeamMemberAtom, null);
+      set(editingTeamMemberValueAtom, "");
+      
+      // Scroll table to top
+      scrollTableToTop(get, set);
+      
+      setTimeout(() => {
+        set(setStatusAtom, { isWorking: false, message: "New plan created!" });
+        setTimeout(() => {
+          set(setStatusAtom, { isWorking: false, message: "" });
+        }, 1500);
+      }, 500);
+      
+      return;
+    }
+    
+    // Has changes, will need confirmation - this should be handled by the UI component
+    set(setStatusAtom, { isWorking: false, message: "Plan has changes - confirmation needed" });
+  },
+);
+
+// Reset plan selections action atom - updated to use history and check for changes
+export const resetPlanSelectionsAtom = atom(
+  null,
+  (get, set) => {
+    const currentState = get(planStateAtom);
+    
+    // Check if there are any selections to reset
+    if (Object.keys(currentState.selections).length === 0) {
+      set(setStatusAtom, { isWorking: false, message: "No selections to reset" });
+      return;
+    }
+    
+    set(setStatusAtom, { isWorking: true, message: "Clearing course selections..." });
+    
+    const action: PlanAction = {
+      type: "RESET_SELECTIONS",
+      timestamp: new Date().toISOString(),
+      id: generateActionId(),
+      payload: {
+        oldSelections: currentState.selections,
+      },
+    };
+    
+    set(executeActionAtom, action);
+    
+    // Scroll table to top
+    scrollTableToTop(get, set);
+    
+    setTimeout(() => {
+      set(setStatusAtom, { isWorking: false, message: "Course selections cleared!" });
+      setTimeout(() => {
+        set(setStatusAtom, { isWorking: false, message: "" });
+      }, 1500);
+    }, 500);
+  },
+);
+
+// Import plan action atom - updated to use history
+export const importPlanAtom = atom(
+  null,
+  (get, set, importedPlanState: PlanState) => {
+    set(setStatusAtom, { isWorking: true, message: "Importing plan..." });
+    
+    const currentState = get(planStateAtom);
+    
+    const action: PlanAction = {
+      type: "IMPORT_PLAN",
+      timestamp: new Date().toISOString(),
+      id: generateActionId(),
+      payload: {
+        oldPlanState: currentState,
+        newPlanState: importedPlanState,
+      },
+    };
+    
+    set(executeActionAtom, action);
+    
+    // Reset other related state
+    set(isEditingBudgetAtom, false);
+    set(budgetInputAtom, "");
+    set(editingTeamMemberAtom, null);
+    set(editingTeamMemberValueAtom, "");
+    
+    // Scroll table to top
+    scrollTableToTop(get, set);
+    
+    setTimeout(() => {
+      set(setStatusAtom, { isWorking: false, message: "Plan imported successfully!" });
+      setTimeout(() => {
+        set(setStatusAtom, { isWorking: false, message: "" });
+      }, 2000);
+    }, 500);
+  },
+);
+
+// Update title action atom - new
+export const updateTitleAtom = atom(
+  null,
+  (get, set, newTitle: string) => {
+    const currentState = get(planStateAtom);
+    
+    if (currentState.title === newTitle) {
+      return; // No change
+    }
+    
+    const action: PlanAction = {
+      type: "UPDATE_TITLE",
+      timestamp: new Date().toISOString(),
+      id: generateActionId(),
+      payload: {
+        oldTitle: currentState.title,
+        newTitle,
+      },
+    };
+    
+    set(executeActionAtom, action);
+  },
+);
+
+// Update notes action atom - new
+export const updateNotesAtom = atom(
+  null,
+  (get, set, newNotes: string) => {
+    const currentState = get(planStateAtom);
+    const currentNotes = currentState.notes || "";
+    
+    if (currentNotes === newNotes) {
+      return; // No change
+    }
+    
+    const action: PlanAction = {
+      type: "UPDATE_NOTES",
+      timestamp: new Date().toISOString(),
+      id: generateActionId(),
+      payload: {
+        oldNotes: currentNotes,
+        newNotes,
+      },
+    };
+    
+    set(executeActionAtom, action);
+  },
+);
+
+// Toggle credits mode action atom - updated to use history
+export const toggleCreditsModeAtom = atom(
+  null,
+  (get, set) => {
+    const currentMode = get(isCreditsUnitModeAtom);
+    const newMode = !currentMode;
+    
+    const action: PlanAction = {
+      type: "TOGGLE_CREDITS_MODE",
+      timestamp: new Date().toISOString(),
+      id: generateActionId(),
+      payload: {
+        oldMode: currentMode,
+        newMode,
+      },
+    };
+    
+    // For credits mode, just update the atom directly since it's not part of plan state
+    set(isCreditsUnitModeAtom, newMode);
+    
+    // Still add to history for undo/redo
+    addToHistory(get, set, action);
+  },
+);
+
+// Selection management action atom - updated to use history
+export const toggleSelectionAtom = atom(
+  null,
+  (get, set, { course, member }: { course: Course; member: Person }) => {
+    const currentState = get(planStateAtom);
+    const catalogId = DEFAULT_CATALOG; // For now, use default catalog
+    
+    const wasSelected = hasSelectionForCourse(currentState.selections, member.id, catalogId, course.ID);
+    
+    const action: PlanAction = {
+      type: "TOGGLE_COURSE_SELECTION",
+      timestamp: new Date().toISOString(),
+      id: generateActionId(),
+      payload: {
+        personId: member.id,
+        catalogId,
+        courseId: course.ID,
+        wasSelected,
+      },
+    };
+    
+    set(executeActionAtom, action);
+  },
+);

@@ -1,0 +1,11 @@
+import React from 'react';
+
+const CalculatorBudget = () => {
+  return (
+    <div className="p-4">
+      {/* Budget calculation placeholder */}
+    </div>
+  );
+};
+
+export default CalculatorBudget;

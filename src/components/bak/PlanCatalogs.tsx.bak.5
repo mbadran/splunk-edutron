@@ -1,0 +1,26 @@
+import React from "react";
+import CatalogTable from "./CatalogTable";
+import { Course } from "@/types/types";
+
+interface PlanCatalogsProps {
+  onScroll?: (scrollTop: number) => void;
+  courses: Course[];
+}
+
+const PlanCatalogs: React.FC<PlanCatalogsProps> = ({ 
+  onScroll, 
+  courses 
+}) => {
+  return (
+    <div id="plan-catalogs" className="h-full">
+      <CatalogTable 
+        onScroll={onScroll}
+        courses={courses}
+      />
+    </div>
+  );
+};
+
+PlanCatalogs.displayName = "PlanCatalogs";
+
+export default PlanCatalogs;

@@ -1,0 +1,382 @@
+import { useAtom } from "jotai";
+import { useCallback, useRef, useEffect } from "react";
+import {
+  tableHistoryStateAtom,
+  canUndoTableAtom,
+  canRedoTableAtom,
+  createTableSnapshot,
+} from "@/atoms/table/tableHistoryAtom";
+import { setStatusAtom } from "@/atoms/globalAtoms";
+
+interface UseTableHistoryProps {
+  tableId: string;
+  tableSorting: any[];
+  tableFilters: any[];
+  tableColumnOrder: any[];
+  setTableSorting: (sorting: any[]) => void;
+  setTableFilters: (filters: any[]) => void;
+  setTableColumnOrder: (order: any[]) => void;
+}
+
+export const useTableHistory = ({
+  tableId,
+  tableSorting,
+  tableFilters,
+  tableColumnOrder,
+  setTableSorting,
+  setTableFilters,
+  setTableColumnOrder,
+}: UseTableHistoryProps) => {
+  const [, setStatus] = useAtom(setStatusAtom);
+  const [canUndo] = useAtom(canUndoTableAtom);
+  const [canRedo] = useAtom(canRedoTableAtom);
+  const [tableHistory, setTableHistory] = useAtom(tableHistoryStateAtom);
+
+  // Debounce timer for filter changes
+  const debounceTimer = useRef<NodeJS.Timeout | null>(null);
+  
+  // Flag to prevent circular history creation during undo/redo operations
+  const isSystemUpdate = useRef(false);
+
+  // Track the last known state to prevent duplicate snapshots
+  const lastStateRef = useRef<{
+    sorting: any[];
+    filters: any[];
+    columnOrder: any[];
+  }>({
+    sorting: [],
+    filters: [],
+    columnOrder: [],
+  });
+
+  // Create a snapshot manually (for user actions)
+  const createSnapshot = useCallback(() => {
+    if (isSystemUpdate.current) {
+      console.log(`[${tableId}] Skipping snapshot - system update in progress`);
+      return;
+    }
+
+    const snapshot = createTableSnapshot(
+      tableId,
+      tableSorting,
+      tableFilters,
+      tableColumnOrder,
+    );
+
+    // Check if this is the same as our last tracked state
+    const lastState = lastStateRef.current;
+    if (
+      JSON.stringify(lastState.sorting) === JSON.stringify(snapshot.sorting) &&
+      JSON.stringify(lastState.filters) === JSON.stringify(snapshot.filters) &&
+      JSON.stringify(lastState.columnOrder) === JSON.stringify(snapshot.columnOrder)
+    ) {
+      console.log(`[${tableId}] Skipping duplicate snapshot`);
+      return;
+    }
+
+    // Check if it's the same as the last snapshot in history
+    const lastSnapshot = tableHistory.undoStack[tableHistory.undoStack.length - 1];
+    if (
+      lastSnapshot &&
+      JSON.stringify(lastSnapshot.sorting) === JSON.stringify(snapshot.sorting) &&
+      JSON.stringify(lastSnapshot.filters) === JSON.stringify(snapshot.filters) &&
+      JSON.stringify(lastSnapshot.columnOrder) === JSON.stringify(snapshot.columnOrder)
+    ) {
+      console.log(`[${tableId}] Skipping duplicate history snapshot`);
+      return;
+    }
+
+    console.log(`[${tableId}] Creating table snapshot:`, snapshot);
+
+    // Update our tracked state
+    lastStateRef.current = {
+      sorting: [...tableSorting],
+      filters: [...tableFilters],
+      columnOrder: [...tableColumnOrder],
+    };
+
+    // Add to undo stack and clear redo stack
+    const newUndoStack = [...tableHistory.undoStack, snapshot];
+    const trimmedUndoStack =
+      newUndoStack.length > tableHistory.maxHistorySize
+        ? newUndoStack.slice(-tableHistory.maxHistorySize)
+        : newUndoStack;
+
+    setTableHistory({
+      ...tableHistory,
+      undoStack: trimmedUndoStack,
+      redoStack: [], // Clear redo stack on new action
+    });
+  }, [tableId, tableSorting, tableFilters, tableColumnOrder, tableHistory, setTableHistory]);
+
+  // Debounced snapshot for filter changes (user typing)
+  const createDebouncedSnapshot = useCallback(() => {
+    if (debounceTimer.current) {
+      clearTimeout(debounceTimer.current);
+    }
+
+    debounceTimer.current = setTimeout(() => {
+      createSnapshot();
+    }, 750); // 750ms debounce for filter typing
+  }, [createSnapshot]);
+
+  // Cleanup debounce timer on unmount
+  useEffect(() => {
+    return () => {
+      if (debounceTimer.current) {
+        clearTimeout(debounceTimer.current);
+      }
+    };
+  }, []);
+
+  // Event handlers for TanStack table events
+  const handleSortingChange = useCallback((sorting: any[]) => {
+    console.log(`[${tableId}] Sorting changed:`, sorting);
+    setTableSorting(sorting);
+    // Immediate snapshot for sorting (user clicks sort button)
+    setTimeout(() => createSnapshot(), 0);
+  }, [tableId, setTableSorting, createSnapshot]);
+
+  const handleFiltersChange = useCallback((filters: any[]) => {
+    console.log(`[${tableId}] Filters changed:`, filters);
+    setTableFilters(filters);
+    // Debounced snapshot for filtering (user types in filter)
+    createDebouncedSnapshot();
+  }, [tableId, setTableFilters, createDebouncedSnapshot]);
+
+  const handleColumnOrderChange = useCallback((order: any[]) => {
+    console.log(`[${tableId}] Column order changed:`, order);
+    setTableColumnOrder(order);
+    // Immediate snapshot for column reordering (user drags column)
+    setTimeout(() => createSnapshot(), 0);
+  }, [tableId, setTableColumnOrder, createSnapshot]);
+
+  // Undo handler
+  const handleUndo = useCallback(() => {
+    if (!canUndo) {
+      console.log(`[${tableId}] Cannot undo - no history available`);
+      return;
+    }
+
+    setStatus({ isWorking: true, message: "Undoing table change..." });
+
+    const lastSnapshot = tableHistory.undoStack[tableHistory.undoStack.length - 1];
+    if (!lastSnapshot || lastSnapshot.tableId !== tableId) {
+      console.log(`[${tableId}] No valid undo state found`);
+      setStatus({ isWorking: false, message: "No valid undo state found" });
+      setTimeout(() => setStatus({ isWorking: false, message: "" }), 2000);
+      return;
+    }
+
+    console.log(`[${tableId}] Executing undo to state:`, lastSnapshot);
+
+    // Create current state snapshot for redo stack BEFORE applying changes
+    const currentSnapshot = createTableSnapshot(
+      tableId,
+      tableSorting,
+      tableFilters,
+      tableColumnOrder,
+    );
+
+    // Update history stacks
+    const newUndoStack = tableHistory.undoStack.slice(0, -1);
+    const newRedoStack = [...tableHistory.redoStack, currentSnapshot];
+
+    // Set flag to prevent circular updates
+    isSystemUpdate.current = true;
+
+    try {
+      // Apply previous state
+      setTableSorting(lastSnapshot.sorting);
+      setTableFilters(lastSnapshot.filters);
+      setTableColumnOrder(lastSnapshot.columnOrder);
+
+      // Update our tracked state
+      lastStateRef.current = {
+        sorting: [...lastSnapshot.sorting],
+        filters: [...lastSnapshot.filters],
+        columnOrder: [...lastSnapshot.columnOrder],
+      };
+
+      // Update history AFTER state changes
+      setTableHistory({
+        ...tableHistory,
+        undoStack: newUndoStack,
+        redoStack: newRedoStack,
+      });
+
+      setTimeout(() => {
+        setStatus({ isWorking: false, message: "Table change undone!" });
+        setTimeout(() => {
+          setStatus({ isWorking: false, message: "" });
+        }, 1500);
+      }, 500);
+    } finally {
+      // Always clear the flag after a delay
+      setTimeout(() => {
+        isSystemUpdate.current = false;
+        console.log(`[${tableId}] System update flag cleared after undo`);
+      }, 100);
+    }
+  }, [canUndo, tableHistory, tableId, tableSorting, tableFilters, tableColumnOrder, setTableSorting, setTableFilters, setTableColumnOrder, setTableHistory, setStatus]);
+
+  // Redo handler
+  const handleRedo = useCallback(() => {
+    if (!canRedo) {
+      console.log(`[${tableId}] Cannot redo - no history available`);
+      return;
+    }
+
+    setStatus({ isWorking: true, message: "Redoing table change..." });
+
+    const nextSnapshot = tableHistory.redoStack[tableHistory.redoStack.length - 1];
+    if (!nextSnapshot || nextSnapshot.tableId !== tableId) {
+      console.log(`[${tableId}] No valid redo state found`);
+      setStatus({ isWorking: false, message: "No valid redo state found" });
+      setTimeout(() => setStatus({ isWorking: false, message: "" }), 2000);
+      return;
+    }
+
+    console.log(`[${tableId}] Executing redo to state:`, nextSnapshot);
+
+    // Create current state snapshot for undo stack BEFORE applying changes
+    const currentSnapshot = createTableSnapshot(
+      tableId,
+      tableSorting,
+      tableFilters,
+      tableColumnOrder,
+    );
+
+    // Update history stacks
+    const newRedoStack = tableHistory.redoStack.slice(0, -1);
+    const newUndoStack = [...tableHistory.undoStack, currentSnapshot];
+
+    // Set flag to prevent circular updates
+    isSystemUpdate.current = true;
+
+    try {
+      // Apply next state
+      setTableSorting(nextSnapshot.sorting);
+      setTableFilters(nextSnapshot.filters);
+      setTableColumnOrder(nextSnapshot.columnOrder);
+
+      // Update our tracked state
+      lastStateRef.current = {
+        sorting: [...nextSnapshot.sorting],
+        filters: [...nextSnapshot.filters],
+        columnOrder: [...nextSnapshot.columnOrder],
+      };
+
+      // Update history AFTER state changes
+      setTableHistory({
+        ...tableHistory,
+        undoStack: newUndoStack,
+        redoStack: newRedoStack,
+      });
+
+      setTimeout(() => {
+        setStatus({ isWorking: false, message: "Table change redone!" });
+        setTimeout(() => {
+          setStatus({ isWorking: false, message: "" });
+        }, 1500);
+      }, 500);
+    } finally {
+      // Always clear the flag after a delay
+      setTimeout(() => {
+        isSystemUpdate.current = false;
+        console.log(`[${tableId}] System update flag cleared after redo`);
+      }, 100);
+    }
+  }, [canRedo, tableHistory, tableId, tableSorting, tableFilters, tableColumnOrder, setTableSorting, setTableFilters, setTableColumnOrder, setTableHistory, setStatus]);
+
+  // Reset handler
+  const handleReset = useCallback(() => {
+    // Check if there are any table settings to reset
+    const hasSettings =
+      tableSorting.length > 0 ||
+      tableFilters.length > 0 ||
+      tableColumnOrder.length > 0;
+
+    if (!hasSettings) {
+      setStatus({ isWorking: false, message: "No table settings to reset" });
+      setTimeout(() => setStatus({ isWorking: false, message: "" }), 2000);
+      return;
+    }
+
+    setStatus({ isWorking: true, message: "Resetting table settings..." });
+
+    console.log(`[${tableId}] Reset requested - creating snapshot before reset`);
+
+    // Create snapshot before reset for undo
+    const currentSnapshot = createTableSnapshot(
+      tableId,
+      tableSorting,
+      tableFilters,
+      tableColumnOrder,
+    );
+
+    // Add to undo stack manually
+    const newUndoStack = [...tableHistory.undoStack, currentSnapshot];
+    const trimmedUndoStack =
+      newUndoStack.length > tableHistory.maxHistorySize
+        ? newUndoStack.slice(-tableHistory.maxHistorySize)
+        : newUndoStack;
+
+    setTableHistory({
+      ...tableHistory,
+      undoStack: trimmedUndoStack,
+      redoStack: [], // Clear redo stack
+    });
+
+    // Set flag to prevent circular updates
+    isSystemUpdate.current = true;
+
+    try {
+      // Clear all table settings
+      setTableSorting([]);
+      setTableFilters([]);
+      setTableColumnOrder([]);
+
+      // Update our tracked state
+      lastStateRef.current = {
+        sorting: [],
+        filters: [],
+        columnOrder: [],
+      };
+
+      console.log(`[${tableId}] Table settings reset completed`);
+
+      setTimeout(() => {
+        setStatus({ isWorking: false, message: "Table settings reset!" });
+        setTimeout(() => {
+          setStatus({ isWorking: false, message: "" });
+        }, 1500);
+      }, 500);
+    } finally {
+      // Clear the flag after reset
+      setTimeout(() => {
+        isSystemUpdate.current = false;
+        console.log(`[${tableId}] System update flag cleared after reset`);
+      }, 100);
+    }
+  }, [tableSorting, tableFilters, tableColumnOrder, tableHistory, setTableHistory, setTableSorting, setTableFilters, setTableColumnOrder, setStatus, tableId]);
+
+  return {
+    // State for external components
+    canUndo,
+    canRedo,
+    
+    // Event handlers for TanStack table integration
+    handleSortingChange,
+    handleFiltersChange, 
+    handleColumnOrderChange,
+    
+    // Action handlers for buttons
+    handleUndo,
+    handleRedo,
+    handleReset,
+    
+    // Manual snapshot creation for custom actions
+    createSnapshot,
+  };
+};

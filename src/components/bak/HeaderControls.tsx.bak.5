@@ -1,0 +1,41 @@
+import React from 'react';
+import Title from './Title';
+import HeaderActions from './HeaderActions';
+
+interface HeaderControlsProps {
+  planTitle: string;
+  onUpdateTitle: (title: string) => void;
+  onUndo: () => void;
+  onRedo: () => void;
+  onDownload: () => void;
+  canUndo: boolean;
+  canRedo: boolean;
+}
+
+const HeaderControls = ({
+  planTitle,
+  onUpdateTitle,
+  onUndo,
+  onRedo,
+  onDownload,
+  canUndo,
+  canRedo
+}: HeaderControlsProps) => {
+  return (
+    <div className="flex items-center gap-6">
+      <div className="flex-1 min-w-0">
+        <Title title={planTitle} onUpdate={onUpdateTitle} />
+      </div>
+
+      <HeaderActions
+        onUndo={onUndo}
+        onRedo={onRedo}
+        onDownload={onDownload}
+        canUndo={canUndo}
+        canRedo={canRedo}
+      />
+    </div>
+  );
+};
+
+export default HeaderControls;

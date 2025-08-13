@@ -1,0 +1,400 @@
+import React from "react";
+import {
+  useReactTable,
+  getCoreRowModel,
+  getSortedRowModel,
+  getFilteredRowModel,
+  ColumnResizeMode,
+  ColumnDef,
+} from "@tanstack/react-table";
+import { Clock, DollarSign, ExternalLink, FileText, ChevronUp } from "lucide-react";
+import { useAtom } from "jotai";
+import { atomWithStorage } from "jotai/utils";
+import BaseTable2, {
+  createCatalogColumn,
+  createRowNumberColumn,
+  CellRenderer,
+} from "@/components/common/BaseTable2";
+import CatalogBase from "./CatalogBase";
+import { Course } from "@/types/types";
+import {
+  COURSE_URL_TEMPLATE,
+  CATEGORY_COLORS,
+  MODE_COLORS,
+  MODE_TOOLTIPS,
+  DETAILS_URL_TEMPLATE,
+  DEFAULT_TABLE,
+  LANGUAGE_COLORS,
+} from "@/utils/constants";
+
+interface CatalogTableProps {
+  catalogId?: string;
+  onScroll?: (scrollTop: number) => void;
+}
+
+// Jotai atoms for state management with localStorage persistence
+const tableSortingAtom = atomWithStorage("catalog-table-sorting", []);
+const tableFiltersAtom = atomWithStorage("catalog-table-filters", []);
+const tableColumnOrderAtom = atomWithStorage("catalog-table-column-order", []);
+
+// Custom catalog cell renderers with consistent text sizing
+const createIDCell = ({ getValue }: any) => (
+  <div className="h-12 flex items-center px-2 justify-start">
+    <code className="text-sm font-mono bg-gray-200 px-3 py-1 rounded-full whitespace-nowrap text-gray-700">
+      {String(getValue())}
+    </code>
+  </div>
+);
+
+const createCategoryCell = ({ getValue }: any) => (
+  <div className="h-12 flex items-center px-2 justify-start">
+    <span
+      className={`px-3 py-1 rounded-full text-sm font-medium whitespace-nowrap ${
+        CATEGORY_COLORS[String(getValue())] || "bg-gray-500 text-white"
+      }`}
+    >
+      {String(getValue())}
+    </span>
+  </div>
+);
+
+const createModeCell = ({ getValue }: any) => (
+  <div className="h-12 flex items-center px-2 justify-start">
+    <span
+      className={`px-3 py-1 rounded-full text-sm font-medium whitespace-nowrap cursor-help ${
+        MODE_COLORS[String(getValue())] || "bg-gray-100 text-gray-800"
+      }`}
+      title={MODE_TOOLTIPS[String(getValue())] || String(getValue())}
+    >
+      {String(getValue())}
+    </span>
+  </div>
+);
+
+const createLanguageCell = ({ getValue }: any) => {
+  const language = String(getValue());
+  const colorClass = LANGUAGE_COLORS[language] || LANGUAGE_COLORS.default;
+  
+  return (
+    <div className="h-12 flex items-center px-2 justify-start">
+      <span className={`px-3 py-1 rounded-full text-sm font-medium whitespace-nowrap ${colorClass}`}>
+        {language}
+      </span>
+    </div>
+  );
+};
+
+const createDurationCell = ({ getValue }: any) => (
+  <div className="h-12 flex items-center px-2 justify-start">
+    <div className="bg-yellow-100 px-3 py-1 rounded-full inline-flex items-center">
+      <Clock className="w-3 h-3 text-gray-600 opacity-80 mr-1" />
+      <span className="text-sm font-medium text-gray-700">
+        {String(getValue())}h
+      </span>
+    </div>
+  </div>
+);
+
+const createPriceCell = ({ getValue }: any) => {
+  const price = Number(getValue());
+  return (
+    <div className="h-12 flex items-center px-2 justify-start">
+      {price === 0 ? (
+        <span className="text-gray-700 font-medium text-sm bg-green-200 px-3 py-1 rounded-full whitespace-nowrap">
+          Free
+        </span>
+      ) : (
+        <div className="flex items-center text-gray-700 bg-pink-200 px-3 py-1 rounded-full">
+          <DollarSign className="w-3 h-3 mr-1" />
+          <span className="font-medium text-sm font-mono">
+            {price.toLocaleString("en-US")}
+          </span>
+        </div>
+      )}
+    </div>
+  );
+};
+
+const createNameCell = ({ getValue, row }: any) => {
+  const course = row.original;
+  return (
+    <div className="h-12 flex items-center px-2 justify-start" style={{ minWidth: 0 }}>
+      <div className="w-full min-w-0 overflow-hidden">
+        {course.STEP_ID ? (
+          <a
+            href={COURSE_URL_TEMPLATE.replace("<STEP_ID>", course.STEP_ID)}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-orange-600 hover:text-orange-800 font-medium flex items-center gap-1 group min-w-0 w-full overflow-hidden text-base"
+            title={String(getValue())}
+          >
+            <span className="truncate min-w-0 flex-1 overflow-hidden text-ellipsis whitespace-nowrap">
+              {String(getValue())}
+            </span>
+            <ExternalLink className="w-3 h-3 opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0" />
+          </a>
+        ) : (
+          <span
+            className="font-medium text-gray-900 truncate block min-w-0 w-full overflow-hidden text-ellipsis whitespace-nowrap text-base"
+            title={String(getValue())}
+          >
+            {String(getValue())}
+          </span>
+        )}
+      </div>
+    </div>
+  );
+};
+
+const createPDFCell = ({ getValue, row }: any) => {
+  const course = row.original;
+  return (
+    <div className="h-12 flex items-center px-2 justify-center">
+      {course.Alias ? (
+        <a
+          href={DETAILS_URL_TEMPLATE.replace("<COURSE_ALIAS>", course.Alias)}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="text-red-600 hover:text-red-800 transition-colors p-1 rounded hover:bg-red-50"
+          title={`View PDF for ${course.Name || "course"}`}
+        >
+          <FileText className="w-4 h-4" />
+        </a>
+      ) : (
+        <span className="text-gray-400" title="PDF not available">
+          <FileText className="w-4 h-4" />
+        </span>
+      )}
+    </div>
+  );
+};
+
+// Create columns using new createCatalogColumn utility
+const createCourseColumns = (onMoveColumn: (columnId: string, direction: 'left' | 'right') => void): ColumnDef<Course>[] => {
+  return [
+    // Row number column (with equal move rights!)
+    createRowNumberColumn<Course>({
+      size: DEFAULT_TABLE.COLUMN_WIDTH.XSMALL,
+      minSize: DEFAULT_TABLE.COLUMN_LIMITS.MIN_XSMALL,
+      maxSize: DEFAULT_TABLE.COLUMN_LIMITS.MAX_XSMALL,
+      headerClassName: "text-sm font-semibold text-white",
+      cellClassName: "px-2 py-1",
+      showMoveHandle: true,
+      onMoveColumn,
+    }),
+    
+    // Course data columns with move handles
+    createCatalogColumn<Course>("ID", {
+      header: "ID",
+      size: DEFAULT_TABLE.COLUMN_WIDTH.MEDIUM,
+      minSize: DEFAULT_TABLE.COLUMN_LIMITS.MIN_MEDIUM,
+      maxSize: DEFAULT_TABLE.COLUMN_LIMITS.MAX_MEDIUM,
+      cell: createIDCell,
+      headerClassName: "text-sm font-semibold text-white",
+      showMoveHandle: true,
+      onMoveColumn,
+    }),
+    
+    createCatalogColumn<Course>("Category", {
+      header: "Category",
+      size: DEFAULT_TABLE.COLUMN_WIDTH.SMALL,
+      minSize: DEFAULT_TABLE.COLUMN_LIMITS.MIN_SMALL,
+      maxSize: DEFAULT_TABLE.COLUMN_LIMITS.MAX_SMALL,
+      cell: createCategoryCell,
+      headerClassName: "text-sm font-semibold text-white",
+      showMoveHandle: true,
+      onMoveColumn,
+    }),
+    
+    createCatalogColumn<Course>("Price", {
+      header: "Price",
+      size: DEFAULT_TABLE.COLUMN_WIDTH.SMALL,
+      minSize: DEFAULT_TABLE.COLUMN_LIMITS.MIN_SMALL,
+      maxSize: DEFAULT_TABLE.COLUMN_LIMITS.MAX_SMALL,
+      cell: createPriceCell,
+      headerClassName: "text-sm font-semibold text-white",
+      showMoveHandle: true,
+      onMoveColumn,
+    }),
+    
+    createCatalogColumn<Course>("Name", {
+      header: "Course",
+      size: DEFAULT_TABLE.COLUMN_WIDTH.HUGE,
+      minSize: DEFAULT_TABLE.COLUMN_LIMITS.MIN_HUGE,
+      maxSize: DEFAULT_TABLE.COLUMN_LIMITS.MAX_HUGE,
+      cell: createNameCell,
+      headerClassName: "text-sm font-semibold text-white",
+      showMoveHandle: true,
+      onMoveColumn,
+    }),
+    
+    createCatalogColumn<Course>("PDF", {
+      header: "PDF",
+      size: DEFAULT_TABLE.COLUMN_WIDTH.XSMALL,
+      minSize: DEFAULT_TABLE.COLUMN_LIMITS.MIN_XSMALL,
+      maxSize: DEFAULT_TABLE.COLUMN_LIMITS.MAX_XSMALL,
+      cell: createPDFCell,
+      headerClassName: "text-sm font-semibold text-white",
+      showMoveHandle: true,
+      onMoveColumn,
+    }),
+    
+    createCatalogColumn<Course>("Mode", {
+      header: "Mode",
+      size: DEFAULT_TABLE.COLUMN_WIDTH.SMALL,
+      minSize: DEFAULT_TABLE.COLUMN_LIMITS.MIN_SMALL,
+      maxSize: DEFAULT_TABLE.COLUMN_LIMITS.MAX_SMALL,
+      cell: createModeCell,
+      headerClassName: "text-sm font-semibold text-white",
+      showMoveHandle: true,
+      onMoveColumn,
+    }),
+    
+    createCatalogColumn<Course>("Language", {
+      header: "Language",
+      size: DEFAULT_TABLE.COLUMN_WIDTH.MEDIUM,
+      minSize: DEFAULT_TABLE.COLUMN_LIMITS.MIN_MEDIUM,
+      maxSize: DEFAULT_TABLE.COLUMN_LIMITS.MAX_MEDIUM,
+      cell: createLanguageCell,
+      headerClassName: "text-sm font-semibold text-white",
+      showMoveHandle: true,
+      onMoveColumn,
+    }),
+    
+    createCatalogColumn<Course>("Duration", {
+      header: "Duration",
+      size: DEFAULT_TABLE.COLUMN_WIDTH.SMALL,
+      minSize: DEFAULT_TABLE.COLUMN_LIMITS.MIN_SMALL,
+      maxSize: DEFAULT_TABLE.COLUMN_LIMITS.MAX_SMALL,
+      cell: createDurationCell,
+      headerClassName: "text-sm font-semibold text-white",
+      showMoveHandle: true,
+      onMoveColumn,
+    }),
+  ];
+};
+
+// Inner table component
+const CatalogTableInner: React.FC<{
+  courses: Course[];
+  isLoading: boolean;
+  error: unknown;
+  onScroll?: (scrollTop: number) => void;
+}> = ({ courses, isLoading, error, onScroll }) => {
+  const [sorting, setSorting] = useAtom(tableSortingAtom);
+  const [columnFilters, setColumnFilters] = useAtom(tableFiltersAtom);
+  const [columnOrder, setColumnOrder] = useAtom(tableColumnOrderAtom);
+  const tableRef = React.useRef<{ scrollToTop: () => void }>(null);
+  const [showScrollTop, setShowScrollTop] = React.useState(false);
+
+  // Column move handler
+  const handleMoveColumn = React.useCallback((columnId: string, direction: 'left' | 'right') => {
+    const currentOrder = columnOrder.length > 0 ? columnOrder : 
+      ["#", "ID", "Category", "Price", "Name", "PDF", "Mode", "Language", "Duration"];
+    
+    const currentIndex = currentOrder.indexOf(columnId);
+    if (currentIndex === -1) return;
+    
+    const newOrder = [...currentOrder];
+    const newIndex = direction === 'left' ? currentIndex - 1 : currentIndex + 1;
+    
+    if (newIndex >= 0 && newIndex < newOrder.length) {
+      // Swap columns
+      [newOrder[currentIndex], newOrder[newIndex]] = [newOrder[newIndex], newOrder[currentIndex]];
+      setColumnOrder(newOrder);
+    }
+  }, [columnOrder, setColumnOrder]);
+
+  // Create columns using new utility
+  const columns = createCourseColumns(handleMoveColumn);
+
+  const table = useReactTable({
+    data: courses || [],
+    columns,
+    getCoreRowModel: getCoreRowModel(),
+    getSortedRowModel: getSortedRowModel(),
+    getFilteredRowModel: getFilteredRowModel(),
+    enableColumnFilters: true,
+    enableColumnOrdering: true,
+    state: {
+      sorting,
+      columnFilters,
+      columnOrder: columnOrder.length > 0 ? columnOrder : undefined,
+    },
+    onSortingChange: setSorting,
+    onColumnFiltersChange: setColumnFilters,
+    onColumnOrderChange: setColumnOrder,
+    columnResizeMode: "onChange" as ColumnResizeMode,
+    enableColumnResizing: true,
+    enableSorting: !isLoading && !error,
+  });
+
+  // Handle scroll events to show/hide scroll-to-top button
+  const handleScroll = (scrollTop: number) => {
+    setShowScrollTop(scrollTop > 200);
+    if (onScroll) {
+      onScroll(scrollTop);
+    }
+  };
+
+  // Handle loading and error states
+  if (isLoading || error) {
+    return null; // CatalogBase handles these states
+  }
+
+  // Calculate footer message
+  const totalCourses = courses.length;
+  const filteredCourses = table.getFilteredRowModel().rows.length;
+  const footerMessage = filteredCourses !== totalCourses 
+    ? `**${filteredCourses}** of **${totalCourses}** courses shown.`
+    : `**${totalCourses}** courses total.`;
+
+  return (
+    <div className="h-full relative">
+      <BaseTable2
+        ref={tableRef}
+        table={table}
+        onScroll={handleScroll}
+        containerHeight="100%"
+        headerClassName="bg-gray-600 border-b border-gray-500"
+        bodyClassName="divide-y divide-gray-200"
+        rowClassName="hover:bg-orange-50 transition-colors"
+        cellClassName="border-r border-gray-200 last:border-r-0"
+        emptyStateMessage="No courses available"
+        loadingState={false}
+        footerMessage={footerMessage}
+      />
+      
+      {/* Scroll to Top Button */}
+      {showScrollTop && (
+        <button
+          onClick={() => tableRef.current?.scrollToTop()}
+          className="fixed bottom-6 right-6 bg-orange-500 hover:bg-orange-600 text-white p-3 rounded-full shadow-lg transition-all duration-200 z-50"
+          title="Scroll to top"
+          aria-label="Scroll to top of table"
+        >
+          <ChevronUp className="w-5 h-5" />
+        </button>
+      )}
+    </div>
+  );
+};
+
+const CatalogTable: React.FC<CatalogTableProps> = ({ catalogId, onScroll }) => {
+  return (
+    <div className="h-full">
+      <CatalogBase catalogId={catalogId}>
+        {({ courses, isLoading, error }) => (
+          <CatalogTableInner
+            courses={courses}
+            isLoading={isLoading}
+            error={error}
+            onScroll={onScroll}
+          />
+        )}
+      </CatalogBase>
+    </div>
+  );
+};
+
+export default CatalogTable;

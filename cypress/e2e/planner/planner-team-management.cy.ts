@@ -1,0 +1,237 @@
+/**
+ * Feature: Team Member Management in Planner
+ *
+ * As a training planner
+ * I want to manage team members in my training plan
+ * So that I can assign courses to different team members
+ */
+
+import {
+  PLANNER_CONSTANTS,
+  getTeamMemberCount,
+} from "../../support/plannerUtils";
+
+const SCENARIO_CONFIG = {
+  ADD_COUNT: 3,
+  REMOVE_COUNT: 2,
+};
+
+describe("Feature: Team Member Management in Planner", () => {
+  // Background: Common setup that runs before each scenario
+  beforeEach("Background: Setup planner", () => {
+    // Given I am on the planner page and it loads successfully
+    cy.visitPlannerAndWait();
+
+    // And I start with exactly one team member
+    getTeamMemberCount().then((count) => {
+      expect(count).to.equal(1);
+    });
+  });
+
+  it("Scenario: Initial state verification", () => {
+    // Then the initial team member should be Richard Hendricks
+    cy.verifyTeamMemberExists(PLANNER_CONSTANTS.DEFAULT_TEAM_NAMES[0]);
+    cy.log(
+      `✅ Verified initial team member: ${PLANNER_CONSTANTS.DEFAULT_TEAM_NAMES[0]}`,
+    );
+  });
+
+  it("Scenario: Adding multiple team members", () => {
+    let currentCount;
+
+    // Given I start with 1 team member
+    getTeamMemberCount()
+      .then((count) => {
+        currentCount = count;
+        expect(currentCount).to.equal(1);
+        return cy.log(`Given: Starting with ${currentCount} team member`);
+      })
+      .then(() => {
+        // When I add multiple team members one by one
+        let chain = cy.wrap(null);
+
+        for (let i = 0; i < SCENARIO_CONFIG.ADD_COUNT; i++) {
+          chain = chain.then(() => {
+            return cy
+              .log(
+                `When: Adding team member ${i + 1} of ${SCENARIO_CONFIG.ADD_COUNT}`,
+              )
+              .then(() => {
+                cy.addTeamMember();
+                return cy.wait(PLANNER_CONSTANTS.TEAM_ACTION_WAIT);
+              })
+              .then(() => {
+                // Then the team member count should increase after each addition
+                return getTeamMemberCount();
+              })
+              .then((newCount) => {
+                const expectedCount = currentCount + 1;
+                return cy
+                  .log(
+                    `Then: After adding member ${i + 1}, count = ${newCount}, expected = ${expectedCount}`,
+                  )
+                  .then(() => {
+                    expect(newCount).to.equal(expectedCount);
+                    currentCount = newCount;
+                  });
+              });
+          });
+        }
+
+        return chain;
+      })
+      .then(() => {
+        // And I should end up with the correct total
+        const expectedFinalCount = 1 + SCENARIO_CONFIG.ADD_COUNT;
+        expect(currentCount).to.equal(expectedFinalCount);
+        return cy.log(
+          `✅ And: Successfully ended with ${currentCount} total team members`,
+        );
+      });
+  });
+
+  it("Scenario: Removing multiple team members", () => {
+    let currentCount;
+
+    // Given I have added additional team members
+    getTeamMemberCount()
+      .then((count) => {
+        currentCount = count;
+        return cy.log(`Given: Starting with ${currentCount} team member`);
+      })
+      .then(() => {
+        // Add the specified number of members
+        let addChain = cy.wrap(null);
+        for (let i = 0; i < SCENARIO_CONFIG.REMOVE_COUNT; i++) {
+          addChain = addChain.then(() => {
+            cy.addTeamMember();
+            return cy.wait(PLANNER_CONSTANTS.TEAM_ACTION_WAIT);
+          });
+        }
+        return addChain;
+      })
+      .then(() => {
+        cy.wait(PLANNER_CONSTANTS.TEAM_ACTION_WAIT);
+        return getTeamMemberCount();
+      })
+      .then((countAfterAdding) => {
+        currentCount = countAfterAdding;
+        const expectedAfterAdding = 1 + SCENARIO_CONFIG.REMOVE_COUNT;
+        expect(currentCount).to.equal(expectedAfterAdding);
+        return cy.log(
+          `Given: Added ${SCENARIO_CONFIG.REMOVE_COUNT} members, now have ${currentCount} total`,
+        );
+      })
+      .then(() => {
+        // When I remove each added team member one by one
+        let removeChain = cy.wrap(null);
+
+        for (let i = 0; i < SCENARIO_CONFIG.REMOVE_COUNT; i++) {
+          removeChain = removeChain.then(() => {
+            // Use the actual team member names from our constant
+            const memberToRemove = PLANNER_CONSTANTS.DEFAULT_TEAM_NAMES[1 + i]; // Skip Richard (index 0)
+            return cy
+              .log(`When: Removing team member: ${memberToRemove}`)
+              .then(() => {
+                cy.removeTeamMember(memberToRemove);
+                return cy.wait(PLANNER_CONSTANTS.TEAM_ACTION_WAIT);
+              })
+              .then(() => {
+                // Then the team member count should decrease after each removal
+                return getTeamMemberCount();
+              })
+              .then((newCount) => {
+                const expectedCount = currentCount - 1;
+                return cy
+                  .log(
+                    `Then: After removing member ${i + 1}, count = ${newCount}, expected = ${expectedCount}`,
+                  )
+                  .then(() => {
+                    expect(newCount).to.equal(expectedCount);
+                    cy.verifyTeamMemberNotExists(memberToRemove);
+                    currentCount = newCount;
+                  });
+              });
+          });
+        }
+
+        return removeChain;
+      })
+      .then(() => {
+        // And I should end up with only the original team member
+        expect(currentCount).to.equal(1);
+        cy.verifyTeamMemberExists(PLANNER_CONSTANTS.DEFAULT_TEAM_NAMES[0]);
+        return cy.log(
+          `✅ And: Successfully returned to original state with 1 team member`,
+        );
+      });
+  });
+
+  it("Scenario: Making course selections for multiple members", () => {
+    // Given I have added 1 additional team member
+    cy.addTeamMember();
+    cy.wait(PLANNER_CONSTANTS.TEAM_ACTION_WAIT);
+
+    getTeamMemberCount()
+      .then((count) => {
+        return cy.log(`Given: Added team member, now have ${count} total`);
+      })
+      .then(() => {
+        // When I select the same course for both team members
+        return cy
+          .log(`When: Selecting course for first team member`)
+          .then(() => {
+            cy.selectCourseForMember(
+              1,
+              PLANNER_CONSTANTS.FIRST_TEAM_MEMBER_COLUMN,
+            );
+            return cy.log(`When: Selecting same course for second team member`);
+          })
+          .then(() => {
+            cy.selectCourseForMember(
+              1,
+              PLANNER_CONSTANTS.FIRST_TEAM_MEMBER_COLUMN + 1,
+            );
+            return cy.log(`Then: Verifying both selections are independent`);
+          })
+          .then(() => {
+            // Then both selections should be independent
+            cy.verifySelectionState(
+              1,
+              true,
+              PLANNER_CONSTANTS.FIRST_TEAM_MEMBER_COLUMN,
+            );
+            cy.verifySelectionState(
+              1,
+              true,
+              PLANNER_CONSTANTS.FIRST_TEAM_MEMBER_COLUMN + 1,
+            );
+            return cy.log(`✅ Then: Both selections are independent`);
+          });
+      });
+  });
+
+  it("Scenario: Team member limit testing - STUB", () => {
+    // TODO: Implement comprehensive testing of 20 team member limit
+    cy.log("📝 Scenario: Team member limit testing - To be implemented");
+    cy.log("This scenario will test:");
+    cy.log("- Given I approach the maximum team size limit");
+    cy.log(
+      `- When I try to add more than ${PLANNER_CONSTANTS.MAX_TEAM_MEMBERS} team members`,
+    );
+    cy.log("- Then the system should prevent adding beyond the limit");
+    cy.log("- And provide appropriate user feedback about the limit");
+    cy.log("- And maintain system stability with maximum team size");
+  });
+
+  it("Scenario: Editing team member names - STUB", () => {
+    // TODO: Implement after updating code to use inline editing instead of native prompt
+    cy.log("📝 Scenario: Editing team member names - To be implemented");
+    cy.log("This scenario will test:");
+    cy.log("- Given I have a team member with a default name");
+    cy.log("- When I click on the team member name to edit it");
+    cy.log("- And I enter a new name");
+    cy.log("- Then the team member should display the new name");
+    cy.log("- And the new name should persist in the plan state");
+  });
+});

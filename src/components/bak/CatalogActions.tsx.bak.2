@@ -1,0 +1,209 @@
+import React, { useEffect } from "react";
+import { Undo, Redo, Settings } from "lucide-react";
+import { useAtom } from "jotai";
+import { atomWithStorage } from "jotai/utils";
+import { setStatusAtom } from "@/atoms/globalAtoms";
+import {
+  tableHistoryStateAtom,
+  canUndoTableAtom,
+  canRedoTableAtom,
+  addToTableHistory,
+  createTableSnapshot,
+  clearTableHistoryAtom,
+} from "@/atoms/table/tableHistoryAtom";
+
+// Table state atoms from CatalogTable.tsx - import the same atoms
+const tableSortingAtom = atomWithStorage("catalog-table-sorting", []);
+const tableFiltersAtom = atomWithStorage("catalog-table-filters", []);
+const tableColumnOrderAtom = atomWithStorage("catalog-table-column-order", []);
+
+interface CatalogActionsProps {
+  tableId?: string;
+}
+
+const CatalogActions = ({ tableId = "catalog" }: CatalogActionsProps) => {
+  const [, setStatus] = useAtom(setStatusAtom);
+  const [canUndo] = useAtom(canUndoTableAtom);
+  const [canRedo] = useAtom(canRedoTableAtom);
+  const [tableHistory, setTableHistory] = useAtom(tableHistoryStateAtom);
+  const [, clearTableHistory] = useAtom(clearTableHistoryAtom);
+
+  const [tableSorting, setTableSorting] = useAtom(tableSortingAtom);
+  const [tableFilters, setTableFilters] = useAtom(tableFiltersAtom);
+  const [tableColumnOrder, setTableColumnOrder] = useAtom(tableColumnOrderAtom);
+
+  // Track table state changes and add to history
+  useEffect(() => {
+    const snapshot = createTableSnapshot(tableId, tableSorting, tableFilters, tableColumnOrder);
+    
+    // Don't add if it's the same as the last snapshot
+    const lastSnapshot = tableHistory.undoStack[tableHistory.undoStack.length - 1];
+    if (lastSnapshot && 
+        JSON.stringify(lastSnapshot.sorting) === JSON.stringify(snapshot.sorting) &&
+        JSON.stringify(lastSnapshot.filters) === JSON.stringify(snapshot.filters) &&
+        JSON.stringify(lastSnapshot.columnOrder) === JSON.stringify(snapshot.columnOrder)) {
+      return;
+    }
+    
+    // Add to undo stack and clear redo stack
+    const newUndoStack = [...tableHistory.undoStack, snapshot];
+    
+    // Limit history size
+    const trimmedUndoStack = newUndoStack.length > tableHistory.maxHistorySize
+      ? newUndoStack.slice(-tableHistory.maxHistorySize)
+      : newUndoStack;
+    
+    setTableHistory({
+      ...tableHistory,
+      undoStack: trimmedUndoStack,
+      redoStack: [], // Clear redo stack on new action
+    });
+  }, [tableSorting, tableFilters, tableColumnOrder, tableId, tableHistory, setTableHistory]);
+
+  const handleUndo = () => {
+    if (!canUndo) return;
+
+    setStatus({ isWorking: true, message: "Undoing table change..." });
+
+    const lastSnapshot = tableHistory.undoStack[tableHistory.undoStack.length - 1];
+    if (!lastSnapshot || lastSnapshot.tableId !== tableId) return;
+
+    // Create current state snapshot for redo stack
+    const currentSnapshot = createTableSnapshot(tableId, tableSorting, tableFilters, tableColumnOrder);
+
+    // Update history stacks
+    const newUndoStack = tableHistory.undoStack.slice(0, -1);
+    const newRedoStack = [...tableHistory.redoStack, currentSnapshot];
+
+    setTableHistory({
+      ...tableHistory,
+      undoStack: newUndoStack,
+      redoStack: newRedoStack,
+    });
+
+    // Apply previous state
+    setTableSorting(lastSnapshot.sorting);
+    setTableFilters(lastSnapshot.filters);
+    setTableColumnOrder(lastSnapshot.columnOrder);
+
+    setTimeout(() => {
+      setStatus({ isWorking: false, message: "Table change undone!" });
+      setTimeout(() => {
+        setStatus({ isWorking: false, message: "" });
+      }, 1500);
+    }, 500);
+  };
+
+  const handleRedo = () => {
+    if (!canRedo) return;
+
+    setStatus({ isWorking: true, message: "Redoing table change..." });
+
+    const nextSnapshot = tableHistory.redoStack[tableHistory.redoStack.length - 1];
+    if (!nextSnapshot || nextSnapshot.tableId !== tableId) return;
+
+    // Create current state snapshot for undo stack
+    const currentSnapshot = createTableSnapshot(tableId, tableSorting, tableFilters, tableColumnOrder);
+
+    // Update history stacks
+    const newRedoStack = tableHistory.redoStack.slice(0, -1);
+    const newUndoStack = [...tableHistory.undoStack, currentSnapshot];
+
+    setTableHistory({
+      ...tableHistory,
+      undoStack: newUndoStack,
+      redoStack: newRedoStack,
+    });
+
+    // Apply next state
+    setTableSorting(nextSnapshot.sorting);
+    setTableFilters(nextSnapshot.filters);
+    setTableColumnOrder(nextSnapshot.columnOrder);
+
+    setTimeout(() => {
+      setStatus({ isWorking: false, message: "Table change redone!" });
+      setTimeout(() => {
+        setStatus({ isWorking: false, message: "" });
+      }, 1500);
+    }, 500);
+  };
+
+  const handleReset = () => {
+    // Check if there are any table settings to reset
+    const hasSettings = 
+      tableSorting.length > 0 || 
+      tableFilters.length > 0 || 
+      tableColumnOrder.length > 0;
+
+    if (!hasSettings) {
+      setStatus({ isWorking: false, message: "No table settings to reset" });
+      setTimeout(() => setStatus({ isWorking: false, message: "" }), 2000);
+      return;
+    }
+
+    setStatus({ isWorking: true, message: "Resetting table settings..." });
+
+    // Create snapshot before reset for undo
+    const currentSnapshot = createTableSnapshot(tableId, tableSorting, tableFilters, tableColumnOrder);
+    
+    // Add to undo stack manually
+    const newUndoStack = [...tableHistory.undoStack, currentSnapshot];
+    const trimmedUndoStack = newUndoStack.length > tableHistory.maxHistorySize
+      ? newUndoStack.slice(-tableHistory.maxHistorySize)
+      : newUndoStack;
+    
+    setTableHistory({
+      ...tableHistory,
+      undoStack: trimmedUndoStack,
+      redoStack: [], // Clear redo stack
+    });
+
+    // Clear all table settings
+    setTableSorting([]);
+    setTableFilters([]);
+    setTableColumnOrder([]);
+
+    setTimeout(() => {
+      setStatus({ isWorking: false, message: "Table settings reset!" });
+      setTimeout(() => {
+        setStatus({ isWorking: false, message: "" });
+      }, 1500);
+    }, 500);
+  };
+
+  return (
+    <div className="flex items-start justify-center gap-1 sm:gap-2 lg:gap-3 flex-wrap">
+      <button
+        onClick={handleUndo}
+        disabled={!canUndo}
+        title="Undo Table Change"
+        className="flex items-center justify-center p-2 sm:p-2.5 bg-slate-300 text-slate-700 rounded-md hover:bg-slate-400 disabled:bg-gray-200 disabled:text-gray-400 disabled:cursor-not-allowed transition-colors"
+      >
+        <Undo className="w-3 h-3 sm:w-3.5 sm:h-3.5" />
+      </button>
+
+      <button
+        onClick={handleRedo}
+        disabled={!canRedo}
+        title="Redo Table Change"
+        className="flex items-center justify-center p-2 sm:p-2.5 bg-slate-300 text-slate-700 rounded-md hover:bg-slate-400 disabled:bg-gray-200 disabled:text-gray-400 disabled:cursor-not-allowed transition-colors"
+      >
+        <Redo className="w-3 h-3 sm:w-3.5 sm:h-3.5" />
+      </button>
+
+      {/* Divider */}
+      <div className="w-2 sm:w-4 lg:w-6"></div>
+
+      <button
+        onClick={handleReset}
+        title="Reset Table Settings"
+        className="flex items-center justify-center p-2 sm:p-2.5 bg-slate-300 text-slate-700 rounded-md hover:bg-slate-400 transition-colors"
+        aria-label="Reset Table Settings"
+      >
+        <Settings className="w-3 h-3 sm:w-3.5 sm:h-3.5" />
+      </button>
+    </div>
+  );
+};
+
+export default CatalogActions;

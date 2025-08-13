@@ -1,0 +1,314 @@
+import React, { useState, useEffect } from 'react';
+import { Plus, Edit, Check, X, Trash2 } from 'lucide-react';
+import TeamInsights from './TeamInsights';
+
+interface Course {
+  ID: string;
+  Name: string;
+  Category: string;
+  Duration: number;
+  Mode: string;
+  Price: number;
+  STEP_ID?: string;
+}
+
+interface SelectionCellProps {
+  isSelected: boolean;
+  onToggle: () => void;
+  courseName: string;
+  memberName: string;
+  rowIndex: number;
+}
+
+interface TeamMemberHeaderProps {
+  member: string;
+  index: number;
+  onEdit: () => void;
+  onDelete: () => void;
+  isEditing: boolean;
+  editValue: string;
+  onEditChange: (value: string) => void;
+  onSave: () => void;
+  onCancel: () => void;
+  totalMembers: number;
+}
+
+interface TeamProps {
+  courses: Course[];
+  onScroll?: (scrollTop: number) => void;
+  scrollTop?: number;
+}
+
+const SelectionCell = ({ isSelected, onToggle, courseName, memberName, rowIndex }: SelectionCellProps) => {
+  const baseRowClass = rowIndex % 2 === 0 ? 'bg-white' : 'bg-gray-50';
+  const cellClass = isSelected ? 'bg-green-50' : baseRowClass;
+  
+  return (
+    <td className={`w-32 h-12 text-center cursor-pointer transition-all duration-200 border-b border-gray-200 ${cellClass} hover:bg-orange-50`}>
+      <button
+        onClick={onToggle}
+        className={`w-full h-full flex items-center justify-center text-lg font-bold transition-colors ${
+          isSelected ? 'text-green-700' : 'text-gray-400 hover:text-green-700'
+        }`}
+        title={`Toggle ${courseName} for ${memberName}`}
+        aria-label={`${isSelected ? 'Remove' : 'Add'} ${courseName} for ${memberName}`}
+      >
+        {isSelected ? '●' : ''}
+      </button>
+    </td>
+  );
+};
+
+const TeamMemberHeader = ({ member, index, onEdit, onDelete, isEditing, editValue, onEditChange, onSave, onCancel, totalMembers }: TeamMemberHeaderProps) => {
+  const getColumnGradient = (index: number, total: number) => {
+    if (total === 1) return '#000000';
+    const ratio = index / (total - 1);
+    const grayValue = Math.round(80 * ratio);
+    return `rgb(${grayValue}, ${grayValue}, ${grayValue})`;
+  };
+
+  return (
+    <th className="w-32 h-12 text-center sticky top-0 z-10 text-white font-semibold"
+        style={{ backgroundColor: getColumnGradient(index, totalMembers) }}>
+      {isEditing ? (
+        <div className="flex items-center justify-center gap-1">
+          <input
+            type="text"
+            value={editValue}
+            onChange={(e) => onEditChange(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') onSave();
+              if (e.key === 'Escape') onCancel();
+            }}
+            className="w-20 h-6 px-1 text-xs text-gray-800 rounded border-none outline-none text-center"
+            autoFocus
+            maxLength={30}
+          />
+          <button onClick={onSave} className="text-green-300 hover:text-green-100" title="Save">
+            <Check className="w-3 h-3" />
+          </button>
+          <button onClick={onCancel} className="text-red-300 hover:text-red-100" title="Cancel">
+            <X className="w-3 h-3" />
+          </button>
+        </div>
+      ) : (
+        <div className="flex items-center justify-center gap-1 px-1">
+          <button
+            onClick={onEdit}
+            className="font-semibold hover:bg-white/20 rounded transition-colors px-1 text-center min-w-0 flex-1"
+            title="Click to edit name"
+          >
+            <span className="block truncate text-xs leading-tight">{member}</span>
+          </button>
+          <div className="flex gap-1 flex-shrink-0">
+            <button onClick={onEdit} className="text-white/70 hover:text-white" title="Edit name">
+              <Edit className="w-3 h-3" />
+            </button>
+            {totalMembers > 1 && (
+              <button onClick={onDelete} className="text-white/70 hover:text-red-300" title="Delete column">
+                <Trash2 className="w-3 h-3" />
+              </button>
+            )}
+          </div>
+        </div>
+      )}
+    </th>
+  );
+};
+
+const Team: React.FC<TeamProps> = ({ courses, onScroll, scrollTop }) => {
+  const CAST_NAMES = [
+    'Richard Hendricks',
+    'Erlich Bachman',
+    'Dinesh Chugtai',
+    'Bertram Gilfoyle',
+    'Jared Dunn',
+    'Monica Hall',
+    'Gavin Belson',
+    'Nelson Bighetti',
+    'Russ Hanneman',
+    'Peter Gregory',
+    'Laurie Bream',
+    'Ed Chen',
+    'Hoover Chan',
+    'Don Bang',
+    'Carla Walton',
+    'Dan Melcher',
+    'Fiona Wallace',
+    'John Stafford',
+    'Kara Swisher',
+    'Maximo Reyes'
+  ];
+
+  // Fix: Increase max team members to 20
+  const MAX_TEAM_MEMBERS = 20;
+
+  const [teamMembers, setTeamMembers] = useState([CAST_NAMES[0]]);
+  const [selections, setSelections] = useState<Record<string, boolean>>({});
+  const [editingMember, setEditingMember] = useState<number | null>(null);
+  const [editValue, setEditValue] = useState('');
+
+  useEffect(() => {
+    const scrollContainer = document.getElementById('team-scroll');
+    if (scrollContainer && scrollTop !== undefined) {
+      scrollContainer.scrollTop = scrollTop;
+    }
+  }, [scrollTop]);
+
+  const handleScroll = (e: React.UIEvent<HTMLDivElement>) => {
+    onScroll?.(e.currentTarget.scrollTop);
+  };
+
+  const handleDeleteTeamMember = (index: number) => {
+    if (teamMembers.length <= 1) return; // Prevent deleting the last member
+    
+    const updatedMembers = teamMembers.filter((_, i) => i !== index);
+    setTeamMembers(updatedMembers);
+    
+    // Clean up selections for the deleted member
+    const updatedSelections = { ...selections };
+    Object.keys(updatedSelections).forEach(key => {
+      const [courseIndex, memberIndex] = key.split('-').map(Number);
+      if (memberIndex === index) {
+        delete updatedSelections[key];
+      } else if (memberIndex > index) {
+        // Shift indices for members after the deleted one
+        delete updatedSelections[key];
+        updatedSelections[`${courseIndex}-${memberIndex - 1}`] = true;
+      }
+    });
+    setSelections(updatedSelections);
+    
+    // Cancel editing if we were editing the deleted member
+    if (editingMember === index) {
+      setEditingMember(null);
+      setEditValue('');
+    } else if (editingMember !== null && editingMember > index) {
+      // Adjust editing index if editing a member after the deleted one
+      setEditingMember(editingMember - 1);
+    }
+  };
+
+  const handleAddTeamMember = () => {
+    if (teamMembers.length >= MAX_TEAM_MEMBERS) return;
+    
+    const newMemberName = CAST_NAMES[teamMembers.length] || `Team Member ${teamMembers.length + 1}`;
+    setTeamMembers([...teamMembers, newMemberName]);
+  };
+
+  const handleUpdateTeamMember = (index: number, newName: string) => {
+    const trimmedName = newName.trim();
+    if (!trimmedName) return;
+    
+    // Check for duplicate names
+    if (teamMembers.some((name, i) => i !== index && name.toLowerCase() === trimmedName.toLowerCase())) {
+      return;
+    }
+    
+    const updatedMembers = [...teamMembers];
+    updatedMembers[index] = trimmedName;
+    setTeamMembers(updatedMembers);
+  };
+
+  const handleToggleSelection = (courseIndex: number, memberIndex: number) => {
+    const key = `${courseIndex}-${memberIndex}`;
+    setSelections(prev => ({
+      ...prev,
+      [key]: !prev[key]
+    }));
+  };
+
+  const isSelected = (courseIndex: number, memberIndex: number) => {
+    const key = `${courseIndex}-${memberIndex}`;
+    return selections[key] || false;
+  };
+
+  const startEditing = (index: number) => {
+    setEditingMember(index);
+    setEditValue(teamMembers[index]);
+  };
+
+  const saveEdit = () => {
+    if (editValue.trim() && editingMember !== null) {
+      handleUpdateTeamMember(editingMember, editValue.trim());
+    }
+    setEditingMember(null);
+    setEditValue('');
+  };
+
+  const cancelEdit = () => {
+    setEditingMember(null);
+    setEditValue('');
+  };
+
+  const canAddMember = teamMembers.length < MAX_TEAM_MEMBERS;
+
+  return (
+    <div className="flex flex-col h-full">
+      <div className="flex-1 overflow-hidden">
+        <div 
+          id="team-scroll"
+          className="h-full overflow-y-auto overflow-x-auto"
+          onScroll={handleScroll}
+        >
+          <table className="w-full border-collapse">
+            <thead>
+              <tr>
+                {teamMembers.map((member, index) => (
+                  <TeamMemberHeader
+                    key={index}
+                    member={member}
+                    index={index}
+                    totalMembers={teamMembers.length}
+                    isEditing={editingMember === index}
+                    editValue={editValue}
+                    onEdit={() => startEditing(index)}
+                    onDelete={() => handleDeleteTeamMember(index)}
+                    onEditChange={setEditValue}
+                    onSave={saveEdit}
+                    onCancel={cancelEdit}
+                  />
+                ))}
+                <th className="w-24 h-12 bg-gray-600 text-white font-semibold sticky top-0 z-10">
+                  <button 
+                    onClick={handleAddTeamMember}
+                    disabled={!canAddMember}
+                    className={`w-full h-full bg-transparent border-none text-white transition-colors rounded flex items-center justify-center gap-1 font-semibold ${
+                      canAddMember 
+                        ? 'hover:bg-white/20 cursor-pointer' 
+                        : 'opacity-50 cursor-not-allowed'
+                    }`}
+                    title={canAddMember ? "Add team member" : `Maximum ${MAX_TEAM_MEMBERS} members allowed`}
+                  >
+                    <Plus className="w-5 h-5" />
+                  </button>
+                </th>
+              </tr>
+            </thead>
+            <tbody>
+              {courses.map((course, courseIndex) => (
+                <tr key={course.ID} className="h-12 border-b border-gray-200 hover:bg-orange-50 transition-colors">
+                  {teamMembers.map((member, memberIndex) => (
+                    <SelectionCell
+                      key={memberIndex}
+                      isSelected={isSelected(courseIndex, memberIndex)}
+                      onToggle={() => handleToggleSelection(courseIndex, memberIndex)}
+                      courseName={course.Name}
+                      memberName={member}
+                      rowIndex={courseIndex}
+                    />
+                  ))}
+                  <td className="w-24 h-12"></td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
+      
+      <TeamInsights />
+    </div>
+  );
+};
+
+export default Team;

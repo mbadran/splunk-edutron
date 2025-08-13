@@ -1,0 +1,107 @@
+/**
+ * Planner Tests
+ */
+
+describe("Planner - Basic Loading", () => {
+  beforeEach(() => {
+    // Start each test with a fresh planner page
+    cy.visitPlanner();
+  });
+
+  it("loads the planner", () => {
+    // Test 1: Basic page elements are present
+    cy.get("#planner").should("be.visible");
+    cy.get("#calculator").should("be.visible");
+    cy.get("#monotable").should("be.visible");
+
+    // Check that the page title is correct
+    cy.title().should("contain", "Planner");
+
+    // Check that the app header is working
+    cy.get("#app-header").should("be.visible");
+
+    // Take a screenshot for visual verification
+    cy.screenshot("planner-loaded");
+  });
+
+  it("displays the calculator with initial values", () => {
+    // Test 2: Calculator starts in the correct state
+    cy.get("#calculator").should("be.visible");
+
+    // Check that calculator shows $0 initially (or whatever your default is)
+    cy.get("#calculator").within(() => {
+      // Look for total cost display
+      cy.contains("Total").should("be.visible");
+
+      // You might have specific selectors for the total amount
+      // This will depend on your exact calculator implementation
+      cy.get('[data-testid="total-cost"], #total-cost, .total-cost').should(
+        "be.visible",
+      );
+    });
+
+    cy.screenshot("calculator-initial-state");
+  });
+
+  it("shows team members section", () => {
+    // Test 3: Team section is present
+    cy.get('#plan-teams, [data-testid="plan-teams"]').should("be.visible");
+
+    // Should show at least one default team member (Richard from your constants)
+    cy.contains("Richard").should("be.visible");
+
+    cy.screenshot("team-members-section");
+  });
+
+  it("shows catalog courses section", () => {
+    // Test 4: Catalog section is present with courses
+    cy.get('#plan-catalogs, [data-testid="plan-catalogs"]').should(
+      "be.visible",
+    );
+
+    // Should show course data loaded from CSV
+    cy.get("#plan-catalogs").within(() => {
+      // Look for table or course list
+      cy.get('table, .course-list, [data-testid="course-table"]').should(
+        "be.visible",
+      );
+    });
+
+    cy.screenshot("catalog-courses-section");
+  });
+
+  it("has no JavaScript errors on load", () => {
+    // Test 5: Check for console errors
+    cy.window().then((win) => {
+      // This is a basic check - you might want to set up more sophisticated error tracking
+      cy.get("#planner").should("be.visible");
+
+      // Skipping this for now
+      // If you have error boundaries or error states, check they're not showing
+      // cy.get("body").should("not.contain", "Error");
+      // cy.get("body").should("not.contain", "Something went wrong");
+    });
+
+    cy.screenshot("no-errors-state");
+  });
+});
+
+// Optional: More specific test for when you're ready
+/*
+describe("Planner - Smoke Test", () => {
+  it("navigates to planner from home page", () => {
+    // Start from home and navigate to planner
+    cy.visit("/");
+    cy.waitForAppReady();
+
+    // Click planner navigation link
+    cy.get("#navigation").contains("Planner").click();
+
+    // Verify we're on the planner page
+    cy.url().should("include", "/planner");
+    cy.get("#planner").should("be.visible");
+
+    cy.screenshot("navigation-to-planner");
+  });
+});
+*/

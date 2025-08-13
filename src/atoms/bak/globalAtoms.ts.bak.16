@@ -1,0 +1,448 @@
+import { atom } from "jotai";
+import { atomWithStorage } from "jotai/utils";
+import { Catalog, Status, Course, PlanState, Person } from "@/types/types";
+import { DEFAULT_PLAN_TITLE, DEFAULT_TEAM_NAMES, DEFAULT_CATALOG } from "@/utils/constants";
+
+// Helper to generate random ID with prefix
+const generateRandomId = (prefix: string): string => {
+  return `${prefix}-${Math.random().toString(36).substr(2, 9)}`;
+};
+
+// Global working indicator state
+export const workingAtom = atom<boolean>(false);
+export const workingMessageAtom = atom<string>("");
+
+// Catalog state atoms - simple data storage only
+export const catalogsAtom = atom<Catalog[]>([]);
+export const catalogsLoadingAtom = atom<boolean>(false);
+export const catalogsErrorAtom = atom<string | null>(null);
+
+// Planner-specific atoms as per PRD data flow requirements
+export const plannerCatalogsAtom = atom<string[]>([DEFAULT_CATALOG]); // Default to hardcoded catalog for MVP
+
+// PlanCalculator state atoms
+export const isEditingBudgetAtom = atom<boolean>(false);
+export const budgetInputAtom = atom<string>("");
+export const isCreditsUnitModeAtom = atom<boolean>(true); // Start with TUs as requested
+
+// Team editing state atoms
+export const editingTeamMemberAtom = atom<number | null>(null);
+export const editingTeamMemberValueAtom = atom<string>("");
+
+// Table scroll reference atom for scroll-to-top functionality
+export const tableScrollRefAtom = atom<{ scrollToOffset: (offset: number) => void } | null>(null);
+
+// Helper function to add course selection for a person in a specific catalog
+export const addCourseSelection = (
+  selections: Record<string, Record<string, string[]>>, 
+  personId: string, 
+  catalogId: string, 
+  courseId: string
+): Record<string, Record<string, string[]>> => {
+  const personSelections = selections[personId] || {};
+  const catalogCourses = personSelections[catalogId] || [];
+  
+  if (!catalogCourses.includes(courseId)) {
+    return {
+      ...selections,
+      [personId]: {
+        ...personSelections,
+        [catalogId]: [...catalogCourses, courseId],
+      },
+    };
+  }
+  
+  return selections;
+};
+
+// Helper function to remove course selection for a person in a specific catalog
+export const removeCourseSelection = (
+  selections: Record<string, Record<string, string[]>>, 
+  personId: string, 
+  catalogId: string, 
+  courseId: string
+): Record<string, Record<string, string[]>> => {
+  const personSelections = selections[personId] || {};
+  const catalogCourses = personSelections[catalogId] || [];
+  
+  const updatedCourses = catalogCourses.filter(id => id !== courseId);
+  
+  if (updatedCourses.length === 0) {
+    // Remove empty catalog
+    const { [catalogId]: removed, ...restCatalogs } = personSelections;
+    
+    if (Object.keys(restCatalogs).length === 0) {
+      // Remove empty person
+      const { [personId]: removedPerson, ...restSelections } = selections;
+      return restSelections;
+    }
+    
+    return {
+      ...selections,
+      [personId]: restCatalogs,
+    };
+  }
+  
+  return {
+    ...selections,
+    [personId]: {
+      ...personSelections,
+      [catalogId]: updatedCourses,
+    },
+  };
+};
+
+// Helper function to check if person has course selected in a specific catalog
+export const hasSelectionForCourse = (
+  selections: Record<string, Record<string, string[]>>, 
+  personId: string, 
+  catalogId: string, 
+  courseId: string
+): boolean => {
+  const personSelections = selections[personId] || {};
+  const catalogCourses = personSelections[catalogId] || [];
+  return catalogCourses.includes(courseId);
+};
+
+// Create initial plan state with random IDs (consistent format)
+const createInitialPlanState = (): PlanState => {
+  const dynamicTeamId = generateRandomId('team');
+  
+  const defaultMember: Person = {
+    id: generateRandomId('person'),
+    name: DEFAULT_TEAM_NAMES[0],
+    teamId: dynamicTeamId,
+  };
+
+  return {
+    id: generateRandomId('plan'),
+    title: DEFAULT_PLAN_TITLE,
+    description: "",
+    catalogs: [DEFAULT_CATALOG],
+    teams: [dynamicTeamId],
+    teamMembers: [defaultMember],
+    selections: {},
+    budget: null,
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+  };
+};
+
+// Global plan state atom - localStorage persistence
+export const planStateAtom = atomWithStorage<PlanState>("planState", createInitialPlanState());
+
+// Derived atoms for computed values
+export const catalogsCountAtom = atom((get) => get(catalogsAtom).length);
+export const totalCoursesAtom = atom((get) =>
+  get(catalogsAtom).reduce(
+    (total, catalog) => total + (catalog.courseCount || 0),
+    0,
+  ),
+);
+
+// Derived atom to get all courses from planner-selected catalogs
+export const plannerCoursesAtom = atom((get) => {
+  const catalogs = get(catalogsAtom);
+  const planState = get(planStateAtom);
+  
+  const courses: Course[] = [];
+  planState.catalogs.forEach(catalogId => {
+    const catalog = catalogs.find(c => c.id === catalogId);
+    if (catalog && catalog.courses) {
+      courses.push(...catalog.courses);
+    }
+  });
+  
+  return courses;
+});
+
+// Derived atom for plan total calculation
+export const planTotalAtom = atom((get) => {
+  const courses = get(plannerCoursesAtom);
+  const planState = get(planStateAtom);
+  
+  let total = 0;
+  Object.values(planState.selections).forEach(personSelections => {
+    Object.values(personSelections).forEach(courseIds => {
+      courseIds.forEach(courseId => {
+        const course = courses.find(c => c.ID === courseId);
+        if (course) {
+          total += course.Price;
+        }
+      });
+    });
+  });
+  
+  return total;
+});
+
+// Derived atom for cost per member calculation - FIXED to use person IDs
+export const planCostPerMemberAtom = atom((get) => {
+  const courses = get(plannerCoursesAtom);
+  const planState = get(planStateAtom);
+  const costPerMember: Record<string, number> = {};
+  
+  // Initialize all team members with 0 cost using person ID as key
+  planState.teamMembers.forEach(member => {
+    costPerMember[member.id] = 0;
+  });
+  
+  // Calculate cost for each member based on selections using person ID
+  Object.entries(planState.selections).forEach(([personId, personSelections]) => {
+    let memberCost = 0;
+    Object.values(personSelections).forEach(courseIds => {
+      courseIds.forEach(courseId => {
+        const course = courses.find(c => c.ID === courseId);
+        if (course) {
+          memberCost += course.Price;
+        }
+      });
+    });
+    
+    costPerMember[personId] = memberCost;
+  });
+  
+  return costPerMember;
+});
+
+// Derived atom for selected courses count
+export const planSelectedCoursesAtom = atom((get) => {
+  const planState = get(planStateAtom);
+  return Object.values(planState.selections).reduce((total, personSelections) => {
+    return total + Object.values(personSelections).reduce((memberTotal, courseIds) => {
+      return memberTotal + courseIds.length;
+    }, 0);
+  }, 0);
+});
+
+// Working indicator helper - simplified
+export const setStatusAtom = atom(
+  null,
+  (get, set, { isWorking, message }: Status) => {
+    set(workingAtom, isWorking);
+    set(workingMessageAtom, message || "");
+  },
+);
+
+// Helper to scroll table to top
+const scrollTableToTop = (get: any, set: any) => {
+  const tableRef = get(tableScrollRefAtom);
+  if (tableRef && tableRef.scrollToOffset) {
+    tableRef.scrollToOffset(0);
+  }
+};
+
+// Plan state update helpers
+export const updatePlanStateAtom = atom(
+  null,
+  (get, set, updates: Partial<PlanState>) => {
+    const currentState = get(planStateAtom);
+    const updatedState = {
+      ...currentState,
+      ...updates,
+      updatedAt: new Date().toISOString(),
+    };
+    set(planStateAtom, updatedState);
+    
+    // Update status to show operation completed
+    set(setStatusAtom, { isWorking: false, message: "Plan updated" });
+    
+    // Clear status after brief delay
+    setTimeout(() => {
+      set(setStatusAtom, { isWorking: false, message: "" });
+    }, 1000);
+  },
+);
+
+// Budget management action atoms
+export const setBudgetAtom = atom(
+  null,
+  (get, set, budget: number | null) => {
+    set(setStatusAtom, { isWorking: true, message: "Updating budget..." });
+    
+    const currentState = get(planStateAtom);
+    set(planStateAtom, {
+      ...currentState,
+      budget,
+      updatedAt: new Date().toISOString(),
+    });
+    
+    // Clear editing state
+    set(isEditingBudgetAtom, false);
+    set(budgetInputAtom, "");
+    
+    set(setStatusAtom, { isWorking: false, message: "" });
+  },
+);
+
+// Team member management action atoms
+export const addTeamMemberAtom = atom(
+  null,
+  (get, set, newMember: Person) => {
+    set(setStatusAtom, { isWorking: true, message: "Adding team member..." });
+    
+    const currentState = get(planStateAtom);
+    const currentTeamId = currentState.teams[0]; // Use first (and currently only) team
+    
+    const memberWithId = {
+      ...newMember,
+      id: newMember.id || generateRandomId('person'),
+      teamId: currentTeamId,
+    };
+    
+    const updatedMembers = [...currentState.teamMembers, memberWithId];
+    
+    set(updatePlanStateAtom, { teamMembers: updatedMembers });
+  },
+);
+
+export const updateTeamMemberAtom = atom(
+  null,
+  (get, set, { index, updates }: { index: number; updates: Partial<Person> }) => {
+    set(setStatusAtom, { isWorking: true, message: "Updating team member..." });
+    
+    const currentState = get(planStateAtom);
+    const updatedMembers = [...currentState.teamMembers];
+    updatedMembers[index] = { ...updatedMembers[index], ...updates };
+    
+    // Selections are keyed by person ID, so no need to update selection keys when name changes
+    set(updatePlanStateAtom, { teamMembers: updatedMembers });
+    
+    // Clear editing state
+    set(editingTeamMemberAtom, null);
+    set(editingTeamMemberValueAtom, "");
+  },
+);
+
+export const deleteTeamMemberAtom = atom(
+  null,
+  (get, set, index: number) => {
+    set(setStatusAtom, { isWorking: true, message: "Removing team member..." });
+    
+    const currentState = get(planStateAtom);
+    const memberToDelete = currentState.teamMembers[index];
+    const updatedMembers = currentState.teamMembers.filter((_, i) => i !== index);
+    
+    // Clean up selections for deleted member
+    const updatedSelections = { ...currentState.selections };
+    delete updatedSelections[memberToDelete.id];
+    
+    set(updatePlanStateAtom, { 
+      teamMembers: updatedMembers,
+      selections: updatedSelections
+    });
+    
+    // Clear editing state if needed
+    const currentEditing = get(editingTeamMemberAtom);
+    if (currentEditing === index) {
+      set(editingTeamMemberAtom, null);
+      set(editingTeamMemberValueAtom, "");
+    } else if (currentEditing !== null && currentEditing > index) {
+      set(editingTeamMemberAtom, currentEditing - 1);
+    }
+  },
+);
+
+// Create new plan action atom
+export const createNewPlanAtom = atom(
+  null,
+  (get, set) => {
+    set(setStatusAtom, { isWorking: true, message: "Creating new plan..." });
+    
+    const newPlanState = createInitialPlanState();
+    set(planStateAtom, newPlanState);
+    
+    // Reset other related state
+    set(isEditingBudgetAtom, false);
+    set(budgetInputAtom, "");
+    set(editingTeamMemberAtom, null);
+    set(editingTeamMemberValueAtom, "");
+    
+    // Scroll table to top
+    scrollTableToTop(get, set);
+    
+    setTimeout(() => {
+      set(setStatusAtom, { isWorking: false, message: "New plan created!" });
+      setTimeout(() => {
+        set(setStatusAtom, { isWorking: false, message: "" });
+      }, 1500);
+    }, 500);
+  },
+);
+
+// Reset plan selections action atom
+export const resetPlanSelectionsAtom = atom(
+  null,
+  (get, set) => {
+    set(setStatusAtom, { isWorking: true, message: "Clearing course selections..." });
+    
+    const currentState = get(planStateAtom);
+    const resetState = {
+      ...currentState,
+      selections: {},
+      updatedAt: new Date().toISOString(),
+    };
+    
+    set(planStateAtom, resetState);
+    
+    // Scroll table to top
+    scrollTableToTop(get, set);
+    
+    setTimeout(() => {
+      set(setStatusAtom, { isWorking: false, message: "Course selections cleared!" });
+      setTimeout(() => {
+        set(setStatusAtom, { isWorking: false, message: "" });
+      }, 1500);
+    }, 500);
+  },
+);
+
+// Import plan action atom
+export const importPlanAtom = atom(
+  null,
+  (get, set, importedPlanState: PlanState) => {
+    set(setStatusAtom, { isWorking: true, message: "Importing plan..." });
+    
+    // Replace entire plan state with imported data
+    set(planStateAtom, {
+      ...importedPlanState,
+      updatedAt: new Date().toISOString(),
+    });
+    
+    // Reset other related state
+    set(isEditingBudgetAtom, false);
+    set(budgetInputAtom, "");
+    set(editingTeamMemberAtom, null);
+    set(editingTeamMemberValueAtom, "");
+    
+    // Scroll table to top
+    scrollTableToTop(get, set);
+    
+    setTimeout(() => {
+      set(setStatusAtom, { isWorking: false, message: "Plan imported successfully!" });
+      setTimeout(() => {
+        set(setStatusAtom, { isWorking: false, message: "" });
+      }, 2000);
+    }, 500);
+  },
+);
+
+// Selection management action atom
+export const toggleSelectionAtom = atom(
+  null,
+  (get, set, { course, member }: { course: Course; member: Person }) => {
+    const currentState = get(planStateAtom);
+    const catalogId = DEFAULT_CATALOG; // For now, use default catalog. In future, determine from course
+    
+    let updatedSelections;
+    if (hasSelectionForCourse(currentState.selections, member.id, catalogId, course.ID)) {
+      // Remove selection
+      updatedSelections = removeCourseSelection(currentState.selections, member.id, catalogId, course.ID);
+    } else {
+      // Add selection
+      updatedSelections = addCourseSelection(currentState.selections, member.id, catalogId, course.ID);
+    }
+    
+    set(updatePlanStateAtom, { selections: updatedSelections });
+  },
+);

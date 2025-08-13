@@ -1,0 +1,77 @@
+// ***********************************************************
+// Global Cypress configuration and setup
+// ***********************************************************
+
+import './commands'
+
+// Hide fetch/XHR requests from command log for cleaner output
+const app = window.top;
+if (!app.document.head.querySelector('[data-hide-command-log-request]')) {
+  const style = app.document.createElement('style');
+  style.innerHTML = '.command-name-request, .command-name-xhr { display: none }';
+  style.setAttribute('data-hide-command-log-request', '');
+  app.document.head.appendChild(style);
+}
+
+// Global exception handling
+Cypress.on('uncaught:exception', (err, runnable) => {
+  // Ignore ResizeObserver errors that don't affect functionality
+  if (err.message.includes('ResizeObserver loop limit exceeded')) {
+    return false;
+  }
+  
+  return true;
+});
+
+// TypeScript declarations for custom commands
+declare global {
+  namespace Cypress {
+    interface Chainable {
+      // Navigation commands
+      waitForAppReady(): Chainable<void>
+      waitForCatalogsLoaded(): Chainable<void>
+      waitForPlannerReady(): Chainable<void>
+      visitPlannerAndWait(): Chainable<void>
+      visitHomeAndWait(): Chainable<void>
+      
+      // Team member commands
+      addTeamMember(): Chainable<void>
+      removeTeamMember(memberName: string): Chainable<void>
+      verifyTeamMemberExists(memberName: string): Chainable<void>
+      verifyTeamMemberNotExists(memberName: string): Chainable<void>
+      
+      // Selection commands
+      selectCourseForMember(rowIndex: number, memberColumnIndex?: number): Chainable<void>
+      verifySelectionState(rowIndex: number, shouldBeSelected: boolean, memberColumnIndex?: number): Chainable<void>
+      
+      // Calculator commands
+      setBudget(amount: number): Chainable<void>
+      editBudget(newAmount: number): Chainable<void>
+      deleteBudget(): Chainable<void>
+      toggleCreditsMode(): Chainable<void>
+      verifyCalculatorTotal(expectedTotal: number): Chainable<void>
+      verifyBudget(expectedBudget: number): Chainable<void>
+      verifyBudgetDifference(expectedDifference: number): Chainable<void>
+      
+      // Footer commands
+      parseFooterStats(): Chainable<{
+        selections: number;
+        teams: number;
+        teamMembers: number;
+        catalogs: number;
+        courses: number;
+        filtered: number | null;
+      }>
+      verifyFooterStats(expectedStats: Partial<{
+        selections: number;
+        teams: number;
+        teamMembers: number;
+        catalogs: number;
+        courses: number;
+        filtered: number | null;
+      }>): Chainable<void>
+      verifyFooterContains(expectedText: string): Chainable<void>
+      verifyFooterPluralization(): Chainable<void>
+    }
+  }
+}

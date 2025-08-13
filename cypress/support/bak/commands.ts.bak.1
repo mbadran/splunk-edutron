@@ -1,0 +1,59 @@
+// ***********************************************
+// This example commands.ts shows you how to
+// create various custom commands and overwrite
+// existing commands.
+//
+// For more comprehensive examples of custom
+// commands please read more here:
+// https://on.cypress.io/custom-commands
+// ***********************************************
+
+/**
+ * Custom commands for Splunk EDUTRON testing
+ */
+
+// Wait for the app to be ready (basic elements loaded)
+Cypress.Commands.add("waitForAppReady", () => {
+  // Wait for navigation to be present
+  // There is no universal #navigation
+  // cy.get('#navigation', { timeout: 15000 }).should('be.visible');
+
+  // Wait for any loading states to complete
+  cy.get("body").should("not.contain", "Loading...");
+});
+
+// Wait for catalogs to be loaded from CSV files
+Cypress.Commands.add("waitForCatalogsLoaded", () => {
+  // We have no way of checking this yet
+  // Wait for catalogs count to be visible and greater than 0
+  // cy.get("#catalogs-count", { timeout: 30000 }).should("be.visible");
+  // cy.get("#catalogs-count").should(($el) => {
+  //   const count = parseInt($el.text());
+  //   expect(count).to.be.greaterThan(0);
+  // });
+  cy.get("#mono-table", { timeout: 30000 }).should("be.visible");
+});
+
+// Navigate to planner and wait for it to be ready
+Cypress.Commands.add("visitPlanner", () => {
+  cy.visit("/planner");
+  cy.waitForAppReady();
+
+  // Wait for planner-specific elements
+  cy.get("#planner", { timeout: 15000 }).should("be.visible");
+  cy.get("#plan-calculator", { timeout: 15000 }).should("be.visible");
+
+  // Wait for catalog data to load in planner
+  cy.waitForCatalogsLoaded();
+});
+
+// Example of how to add more commands:
+//
+// -- This is a parent command --
+// Cypress.Commands.add('login', (email, password) => { ... })
+//
+// -- This is a child command --
+// Cypress.Commands.add('drag', { prevSubject: 'element'}, (subject, options) => { ... })
+//
+// -- This is a dual command --
+// Cypress.Commands.add('dismiss', { prevSubject: 'optional'}, (subject, options) => { ... })

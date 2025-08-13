@@ -1,0 +1,487 @@
+import { atom } from "jotai";
+import { 
+  planStateAtom,
+  executeActionAtom,
+  setStatusAtom,
+  isEditingBudgetAtom,
+  budgetInputAtom,
+  editingTeamMemberAtom,
+  editingTeamMemberValueAtom,
+  tableScrollRefAtom,
+  isCreditsUnitModeAtom,
+  hasSelectionForCourse,
+  addCourseSelection,
+  removeCourseSelection
+} from "@/atoms/globalAtoms";
+import { Plan, PlanMetadata, PlanMetrics, Person, Course } from "@/types/types";
+import { PlanAction } from "@/types/actions";
+import { APP_VERSION, DEFAULT_CATALOG, DEFAULT_PLAN_TITLE, DEFAULT_TEAM_NAMES } from "@/utils/constants";
+
+// Helper to generate random ID with prefix
+const generateRandomId = (prefix: string): string => {
+  return `${prefix}-${Math.random().toString(36).substr(2, 9)}`;
+};
+
+// Helper to generate action ID
+const generateActionId = (): string => {
+  return `action-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+};
+
+// Helper to scroll table to top
+const scrollTableToTop = (get: any, set: any) => {
+  const tableRef = get(tableScrollRefAtom);
+  if (tableRef && tableRef.scrollToOffset) {
+    tableRef.scrollToOffset(0);
+  }
+};
+
+// Helper to check if current plan has any changes (non-default state)
+const hasNonDefaultPlanState = (planState: any): boolean => {
+  const hasCustomTitle = planState.title !== DEFAULT_PLAN_TITLE;
+  const hasCustomNotes = Boolean(planState.notes && planState.notes.trim());
+  const hasCustomTeamMembers = planState.teamMembers.length > 1 || 
+    (planState.teamMembers.length === 1 && planState.teamMembers[0].name !== DEFAULT_TEAM_NAMES[0]);
+  const hasCourseSelections = Object.keys(planState.selections).length > 0;
+  const hasBudget = planState.budget !== null;
+
+  return hasCustomTitle || hasCustomNotes || hasCustomTeamMembers || hasCourseSelections || hasBudget;
+};
+
+// Create initial plan state with random IDs (consistent format)
+const createInitialPlanState = () => {
+  const dynamicTeamId = generateRandomId('team');
+  
+  const defaultMember: Person = {
+    id: generateRandomId('person'),
+    name: DEFAULT_TEAM_NAMES[0],
+    teamId: dynamicTeamId,
+  };
+
+  return {
+    id: generateRandomId('plan'),
+    title: DEFAULT_PLAN_TITLE,
+    notes: "",
+    catalogs: [DEFAULT_CATALOG],
+    teams: [dynamicTeamId],
+    teamMembers: [defaultMember],
+    selections: {},
+    budget: null,
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+  };
+};
+
+// Export plan functionality as an atom
+export const exportPlanAtom = atom(
+  null,
+  (get, set) => {
+    const planState = get(planStateAtom);
+    
+    set(setStatusAtom, { isWorking: true, message: "Exporting plan..." });
+
+    try {
+      // Create export metadata
+      const metadata: PlanMetadata = {
+        id: `export-${Date.now()}`,
+        appVersion: APP_VERSION,
+        exportedAt: new Date().toISOString(),
+      };
+
+      // Calculate metrics
+      const totalCost = Object.values(planState.selections).reduce((total: number, personSelections: any) => {
+        return total + Object.values(personSelections).reduce((personTotal: number, courseIds: any) => {
+          return personTotal + courseIds.length * 100; // Placeholder calculation
+        }, 0);
+      }, 0);
+
+      const metrics: PlanMetrics = {
+        catalogs: planState.catalogs.length,
+        costPerMember: {},
+        courses: Object.values(planState.selections).reduce((total: number, personSelections: any) => {
+          return total + Object.values(personSelections).reduce((personTotal: number, courseIds: any) => {
+            return personTotal + courseIds.length;
+          }, 0);
+        }, 0),
+        selections: Object.keys(planState.selections).length,
+        teamMembers: planState.teamMembers.length,
+        teams: planState.teams.length,
+        totalCost,
+      };
+
+      // Create complete plan export
+      const exportData: Plan = {
+        metadata,
+        plan: planState,
+        metrics,
+      };
+
+      // Create and download file
+      const blob = new Blob([JSON.stringify(exportData, null, 2)], {
+        type: "application/json",
+      });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = `${planState.title.replace(/[^a-z0-9]/gi, "_").toLowerCase()}_${metadata.id}.json`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+
+      set(setStatusAtom, { isWorking: false, message: "Plan exported successfully!" });
+      setTimeout(() => {
+        set(setStatusAtom, { isWorking: false, message: "" });
+      }, 2000);
+    } catch (error) {
+      console.error("Export failed:", error);
+      set(setStatusAtom, { isWorking: false, message: "Export failed" });
+      setTimeout(() => {
+        set(setStatusAtom, { isWorking: false, message: "" });
+      }, 2000);
+    }
+  }
+);
+
+// Budget management action atoms - updated to use history
+export const setBudgetAtom = atom(
+  null,
+  (get, set, budget: number | null) => {
+    set(setStatusAtom, { isWorking: true, message: "Updating budget..." });
+    
+    const currentState = get(planStateAtom);
+    
+    // Create action
+    const action: PlanAction = {
+      type: "SET_BUDGET",
+      timestamp: new Date().toISOString(),
+      id: generateActionId(),
+      payload: {
+        oldBudget: currentState.budget,
+        newBudget: budget,
+      },
+    };
+    
+    // Execute action
+    set(executeActionAtom, action);
+    
+    // Clear editing state
+    set(isEditingBudgetAtom, false);
+    set(budgetInputAtom, "");
+    
+    set(setStatusAtom, { isWorking: false, message: "" });
+  },
+);
+
+// Team member management action atoms - updated to use history
+export const addTeamMemberAtom = atom(
+  null,
+  (get, set, newMember?: Person) => {
+    set(setStatusAtom, { isWorking: true, message: "Adding team member..." });
+    
+    const currentState = get(planStateAtom);
+    const currentTeamId = currentState.teams[0]; // Use first (and currently only) team
+    
+    // Create member with proper defaults
+    const memberWithId = newMember ? {
+      ...newMember,
+      id: newMember.id || generateRandomId('person'),
+      teamId: currentTeamId,
+    } : {
+      id: generateRandomId('person'),
+      name: DEFAULT_TEAM_NAMES[currentState.teamMembers.length] || `Team Member ${currentState.teamMembers.length + 1}`,
+      teamId: currentTeamId,
+    };
+    
+    const action: PlanAction = {
+      type: "ADD_TEAM_MEMBER",
+      timestamp: new Date().toISOString(),
+      id: generateActionId(),
+      payload: {
+        member: memberWithId,
+        index: currentState.teamMembers.length, // Add at end
+      },
+    };
+    
+    set(executeActionAtom, action);
+  },
+);
+
+export const updateTeamMemberAtom = atom(
+  null,
+  (get, set, { index, updates }: { index: number; updates: Partial<Person> }) => {
+    set(setStatusAtom, { isWorking: true, message: "Updating team member..." });
+    
+    const currentState = get(planStateAtom);
+    const oldMember = currentState.teamMembers[index];
+    const newMember = { ...oldMember, ...updates };
+    
+    const action: PlanAction = {
+      type: "UPDATE_TEAM_MEMBER",
+      timestamp: new Date().toISOString(),
+      id: generateActionId(),
+      payload: {
+        index,
+        oldMember,
+        newMember,
+      },
+    };
+    
+    set(executeActionAtom, action);
+    
+    // Clear editing state
+    set(editingTeamMemberAtom, null);
+    set(editingTeamMemberValueAtom, "");
+  },
+);
+
+export const deleteTeamMemberAtom = atom(
+  null,
+  (get, set, index: number) => {
+    set(setStatusAtom, { isWorking: true, message: "Removing team member..." });
+    
+    const currentState = get(planStateAtom);
+    const memberToDelete = currentState.teamMembers[index];
+    
+    const action: PlanAction = {
+      type: "REMOVE_TEAM_MEMBER",
+      timestamp: new Date().toISOString(),
+      id: generateActionId(),
+      payload: {
+        member: memberToDelete,
+        index,
+        selections: currentState.selections[memberToDelete.id] || {},
+      },
+    };
+    
+    set(executeActionAtom, action);
+    
+    // Clear editing state if needed
+    const currentEditing = get(editingTeamMemberAtom);
+    if (currentEditing === index) {
+      set(editingTeamMemberAtom, null);
+      set(editingTeamMemberValueAtom, "");
+    } else if (currentEditing !== null && currentEditing > index) {
+      set(editingTeamMemberAtom, currentEditing - 1);
+    }
+  },
+);
+
+// Create new plan action atom - updated to use history and check for changes
+export const createNewPlanAtom = atom(
+  null,
+  (get, set) => {
+    const currentState = get(planStateAtom);
+    
+    set(setStatusAtom, { isWorking: true, message: "Creating new plan..." });
+    
+    const newPlanState = createInitialPlanState();
+    
+    const action: PlanAction = {
+      type: "IMPORT_PLAN",
+      timestamp: new Date().toISOString(),
+      id: generateActionId(),
+      payload: {
+        oldPlanState: currentState,
+        newPlanState,
+      },
+    };
+    
+    set(executeActionAtom, action);
+    
+    // Reset other related state
+    set(isEditingBudgetAtom, false);
+    set(budgetInputAtom, "");
+    set(editingTeamMemberAtom, null);
+    set(editingTeamMemberValueAtom, "");
+    
+    // Scroll table to top
+    scrollTableToTop(get, set);
+    
+    setTimeout(() => {
+      set(setStatusAtom, { isWorking: false, message: "New plan created!" });
+      setTimeout(() => {
+        set(setStatusAtom, { isWorking: false, message: "" });
+      }, 1500);
+    }, 500);
+  },
+);
+
+// Reset plan selections action atom - updated to use history and check for changes
+export const resetPlanSelectionsAtom = atom(
+  null,
+  (get, set) => {
+    const currentState = get(planStateAtom);
+    
+    // Check if there are any selections to reset
+    if (Object.keys(currentState.selections).length === 0) {
+      set(setStatusAtom, { isWorking: false, message: "No selections to reset" });
+      return;
+    }
+    
+    set(setStatusAtom, { isWorking: true, message: "Clearing course selections..." });
+    
+    const action: PlanAction = {
+      type: "RESET_SELECTIONS",
+      timestamp: new Date().toISOString(),
+      id: generateActionId(),
+      payload: {
+        oldSelections: currentState.selections,
+      },
+    };
+    
+    set(executeActionAtom, action);
+    
+    // Scroll table to top
+    scrollTableToTop(get, set);
+    
+    setTimeout(() => {
+      set(setStatusAtom, { isWorking: false, message: "Course selections cleared!" });
+      setTimeout(() => {
+        set(setStatusAtom, { isWorking: false, message: "" });
+      }, 1500);
+    }, 500);
+  },
+);
+
+// Import plan action atom - updated to use history
+export const importPlanAtom = atom(
+  null,
+  (get, set, importedPlanState: any) => {
+    set(setStatusAtom, { isWorking: true, message: "Importing plan..." });
+    
+    const currentState = get(planStateAtom);
+    
+    const action: PlanAction = {
+      type: "IMPORT_PLAN",
+      timestamp: new Date().toISOString(),
+      id: generateActionId(),
+      payload: {
+        oldPlanState: currentState,
+        newPlanState: importedPlanState,
+      },
+    };
+    
+    set(executeActionAtom, action);
+    
+    // Reset other related state
+    set(isEditingBudgetAtom, false);
+    set(budgetInputAtom, "");
+    set(editingTeamMemberAtom, null);
+    set(editingTeamMemberValueAtom, "");
+    
+    // Scroll table to top
+    scrollTableToTop(get, set);
+    
+    setTimeout(() => {
+      set(setStatusAtom, { isWorking: false, message: "Plan imported successfully!" });
+      setTimeout(() => {
+        set(setStatusAtom, { isWorking: false, message: "" });
+      }, 2000);
+    }, 500);
+  },
+);
+
+// Update title action atom - new
+export const updateTitleAtom = atom(
+  null,
+  (get, set, newTitle: string) => {
+    const currentState = get(planStateAtom);
+    
+    if (currentState.title === newTitle) {
+      return; // No change
+    }
+    
+    const action: PlanAction = {
+      type: "UPDATE_TITLE",
+      timestamp: new Date().toISOString(),
+      id: generateActionId(),
+      payload: {
+        oldTitle: currentState.title,
+        newTitle,
+      },
+    };
+    
+    set(executeActionAtom, action);
+  },
+);
+
+// Update notes action atom - new
+export const updateNotesAtom = atom(
+  null,
+  (get, set, newNotes: string) => {
+    const currentState = get(planStateAtom);
+    const currentNotes = currentState.notes || "";
+    
+    if (currentNotes === newNotes) {
+      return; // No change
+    }
+    
+    const action: PlanAction = {
+      type: "UPDATE_NOTES",
+      timestamp: new Date().toISOString(),
+      id: generateActionId(),
+      payload: {
+        oldNotes: currentNotes,
+        newNotes,
+      },
+    };
+    
+    set(executeActionAtom, action);
+  },
+);
+
+// Toggle credits mode action atom - updated to use history
+export const toggleCreditsModeAtom = atom(
+  null,
+  (get, set) => {
+    const currentMode = get(isCreditsUnitModeAtom);
+    const newMode = !currentMode;
+    
+    const action: PlanAction = {
+      type: "TOGGLE_CREDITS_MODE",
+      timestamp: new Date().toISOString(),
+      id: generateActionId(),
+      payload: {
+        oldMode: currentMode,
+        newMode,
+      },
+    };
+    
+    // For credits mode, just update the atom directly since it's not part of plan state
+    set(isCreditsUnitModeAtom, newMode);
+    
+    // Still add to history for undo/redo - this will be handled by executeActionAtom
+    // But we need a custom handler since this doesn't affect planState
+  },
+);
+
+// Selection management action atom - updated to use history
+export const toggleSelectionAtom = atom(
+  null,
+  (get, set, { course, member }: { course: Course; member: Person }) => {
+    const currentState = get(planStateAtom);
+    const catalogId = DEFAULT_CATALOG; // For now, use default catalog
+    
+    const wasSelected = hasSelectionForCourse(currentState.selections, member.id, catalogId, course.ID);
+    
+    const action: PlanAction = {
+      type: "TOGGLE_COURSE_SELECTION",
+      timestamp: new Date().toISOString(),
+      id: generateActionId(),
+      payload: {
+        personId: member.id,
+        catalogId,
+        courseId: course.ID,
+        wasSelected,
+      },
+    };
+    
+    set(executeActionAtom, action);
+  },
+);
+
+// Export helper functions for components that need to check plan state
+export { hasNonDefaultPlanState };
+
+// Re-export selection helper functions that should be available
+export { hasSelectionForCourse, addCourseSelection, removeCourseSelection } from "@/atoms/planner/planStateAtom";

@@ -1,0 +1,342 @@
+import React from "react";
+import {
+  useReactTable,
+  getCoreRowModel,
+  getSortedRowModel,
+  ColumnResizeMode,
+  ColumnDef,
+} from "@tanstack/react-table";
+import { Clock, DollarSign, ExternalLink, FileText } from "lucide-react";
+import { useAtom } from "jotai";
+import { atomWithStorage } from "jotai/utils";
+import BaseTable, {
+  createRowNumberColumn,
+  createDataColumn,
+  BaseTableColumnConfig,
+} from "@/components/common/BaseTable";
+import CatalogBase from "./CatalogBase";
+import { Course } from "@/types/types";
+import {
+  COURSE_URL_TEMPLATE,
+  CATEGORY_COLORS,
+  MODE_COLORS,
+  MODE_TOOLTIPS,
+  DEFAULT_TABLE,
+  DETAILS_URL_TEMPLATE,
+} from "@/utils/constants";
+
+interface CatalogTableProps {
+  catalogId?: string;
+  onScroll?: (scrollTop: number) => void;
+}
+
+// Jotai atoms for state management
+const tableSortingAtom = atomWithStorage("catalog-table-sorting", []);
+
+// Column configurations
+const COLUMN_CONFIGS: Record<string, BaseTableColumnConfig> = {
+  ID: {
+    size: DEFAULT_TABLE.COLUMN_WIDTH.MEDIUM,
+    minSize: DEFAULT_TABLE.COLUMN_LIMITS.MIN_MEDIUM,
+    maxSize: DEFAULT_TABLE.COLUMN_LIMITS.MAX_MEDIUM,
+  },
+  Category: {
+    size: DEFAULT_TABLE.COLUMN_WIDTH.MEDIUM,
+    minSize: DEFAULT_TABLE.COLUMN_LIMITS.MIN_LARGE,
+    maxSize: DEFAULT_TABLE.COLUMN_LIMITS.MAX_LARGE,
+  },
+  Mode: {
+    size: DEFAULT_TABLE.COLUMN_WIDTH.SMALL,
+    minSize: DEFAULT_TABLE.COLUMN_LIMITS.MIN_SMALL,
+    maxSize: DEFAULT_TABLE.COLUMN_LIMITS.MAX_SMALL,
+  },
+  Language: {
+    size: DEFAULT_TABLE.COLUMN_WIDTH.SMALL,
+    minSize: DEFAULT_TABLE.COLUMN_LIMITS.MIN_SMALL,
+    maxSize: DEFAULT_TABLE.COLUMN_LIMITS.MAX_SMALL,
+  },
+  Duration: {
+    size: DEFAULT_TABLE.COLUMN_WIDTH.SMALL,
+    minSize: DEFAULT_TABLE.COLUMN_LIMITS.MIN_LARGE,
+    maxSize: DEFAULT_TABLE.COLUMN_LIMITS.MAX_LARGE,
+  },
+  Price: {
+    size: DEFAULT_TABLE.COLUMN_WIDTH.MEDIUM,
+    minSize: DEFAULT_TABLE.COLUMN_LIMITS.MIN_MEDIUM,
+    maxSize: DEFAULT_TABLE.COLUMN_LIMITS.MAX_LARGE,
+  },
+  Name: {
+    size: DEFAULT_TABLE.COLUMN_WIDTH.XXLARGE,
+    minSize: DEFAULT_TABLE.COLUMN_LIMITS.MIN_XXLARGE,
+    maxSize: DEFAULT_TABLE.COLUMN_LIMITS.MAX_XXLARGE,
+  },
+  PDF: {
+    size: DEFAULT_TABLE.COLUMN_WIDTH.SMALL,
+    minSize: DEFAULT_TABLE.COLUMN_LIMITS.MIN_SMALL,
+    maxSize: DEFAULT_TABLE.COLUMN_LIMITS.MAX_SMALL,
+  },
+};
+
+// Cell renderer functions using native TanStack patterns
+const createIDCell = ({ getValue, row }: any) => (
+  <div id={`course-id-${row.index}`}>
+    <div className="h-12 flex items-center px-2 justify-start">
+      <code className="text-sm font-mono text-gray-700 bg-gray-200 px-2 py-1 rounded whitespace-nowrap">
+        {String(getValue())}
+      </code>
+    </div>
+  </div>
+);
+
+const createCategoryCell = ({ getValue, row }: any) => (
+  <div id={`course-category-${row.index}`}>
+    <div className="h-12 flex items-center px-2 justify-start">
+      <span
+        className={`px-2 py-1 rounded-full text-xs font-medium whitespace-nowrap ${
+          CATEGORY_COLORS[String(getValue())] || "bg-gray-500 text-white"
+        }`}
+      >
+        {String(getValue())}
+      </span>
+    </div>
+  </div>
+);
+
+const createModeCell = ({ getValue, row }: any) => (
+  <div id={`course-mode-${row.index}`}>
+    <div className="h-12 flex items-center px-2 justify-start">
+      <span
+        className={`px-2 py-1 rounded-full text-xs font-medium whitespace-nowrap cursor-help ${
+          MODE_COLORS[String(getValue())] || "bg-gray-100 text-gray-800"
+        }`}
+        title={MODE_TOOLTIPS[String(getValue())] || String(getValue())}
+      >
+        {String(getValue())}
+      </span>
+    </div>
+  </div>
+);
+
+const createLanguageCell = ({ getValue, row }: any) => (
+  <div id={`course-language-${row.index}`}>
+    <div className="h-12 flex items-center px-2 justify-start">
+      <span className="px-2 py-1 rounded-full text-xs font-medium whitespace-nowrap bg-blue-100 text-blue-800">
+        {String(getValue())}
+      </span>
+    </div>
+  </div>
+);
+
+const createDurationCell = ({ getValue, row }: any) => (
+  <div id={`course-duration-${row.index}`}>
+    <div className="h-12 flex items-center px-2 justify-start">
+      <div className="relative bg-yellow-100 px-2 py-1 rounded inline-block">
+        <Clock className="absolute left-1 top-1/2 transform -translate-y-1/2 w-3 h-3 text-gray-600 opacity-80" />
+        <span className="text-sm font-medium text-gray-700 pl-4">
+          {String(getValue())}h
+        </span>
+      </div>
+    </div>
+  </div>
+);
+
+const createPriceCell = ({ getValue, row }: any) => {
+  const price = Number(getValue());
+  return (
+    <div id={`course-price-${row.index}`}>
+      <div className="h-12 flex items-center px-2 justify-start">
+        {price === 0 ? (
+          <span className="text-gray-700 font-medium text-sm bg-green-200 px-2 py-1 rounded whitespace-nowrap">
+            Free
+          </span>
+        ) : (
+          <div className="flex items-center text-gray-700 bg-pink-200 px-2 py-1 rounded">
+            <DollarSign className="w-3 h-3 mr-1" />
+            <span className="font-medium text-sm font-mono">
+              {price.toLocaleString("en-US")}
+            </span>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+};
+
+const createNameCell = ({ getValue, row }: any) => {
+  const course = row.original as Course;
+  return (
+    <div id={`course-name-${row.index}`}>
+      <div className="h-12 flex items-center px-2 justify-start" style={{ minWidth: 0 }}>
+        <div className="w-full min-w-0 overflow-hidden">
+          {course.STEP_ID ? (
+            <a
+              href={COURSE_URL_TEMPLATE.replace("<STEP_ID>", course.STEP_ID)}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-orange-600 hover:text-orange-800 font-medium flex items-center gap-1 group min-w-0 w-full overflow-hidden"
+              title={String(getValue())}
+            >
+              <span className="truncate min-w-0 flex-1 overflow-hidden text-ellipsis whitespace-nowrap">
+                {String(getValue())}
+              </span>
+              <ExternalLink className="w-3 h-3 opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0" />
+            </a>
+          ) : (
+            <span
+              className="font-medium text-gray-900 truncate block min-w-0 w-full overflow-hidden text-ellipsis whitespace-nowrap"
+              title={String(getValue())}
+            >
+              {String(getValue())}
+            </span>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+};
+
+const createPDFCell = ({ getValue, row }: any) => {
+  const course = row.original as Course;
+  return (
+    <div id={`course-pdf-${row.index}`}>
+      <div className="h-12 flex items-center px-2 justify-center">
+        {course.Alias ? (
+          <a
+            href={DETAILS_URL_TEMPLATE.replace("<COURSE_ALIAS>", course.Alias)}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-red-600 hover:text-red-800 transition-colors p-1 rounded hover:bg-red-50"
+            title={`View PDF for ${course.Name || "course"}`}
+          >
+            <FileText className="w-4 h-4" />
+          </a>
+        ) : (
+          <span className="text-gray-400" title="PDF not available">
+            <FileText className="w-4 h-4" />
+          </span>
+        )}
+      </div>
+    </div>
+  );
+};
+
+// Create columns using simplified BaseTable utilities
+const createCourseColumns = (): ColumnDef<Course>[] => {
+  return [
+    // Row number column with native TanStack sorting
+    createRowNumberColumn<Course>(),
+    
+    // Data columns using native TanStack patterns
+    createDataColumn<Course>("ID", {
+      ...COLUMN_CONFIGS.ID,
+      header: "ID",
+      cell: createIDCell,
+    }),
+    
+    createDataColumn<Course>("Category", {
+      ...COLUMN_CONFIGS.Category,
+      header: "Category",
+      cell: createCategoryCell,
+    }),
+    
+    createDataColumn<Course>("Price", {
+      ...COLUMN_CONFIGS.Price,
+      header: "Price",
+      cell: createPriceCell,
+    }),
+    
+    createDataColumn<Course>("Name", {
+      ...COLUMN_CONFIGS.Name,
+      header: "Name",
+      cell: createNameCell,
+    }),
+    
+    createDataColumn<Course>("PDF", {
+      ...COLUMN_CONFIGS.PDF,
+      header: "PDF",
+      cell: createPDFCell,
+    }),
+    
+    createDataColumn<Course>("Mode", {
+      ...COLUMN_CONFIGS.Mode,
+      header: "Mode",
+      cell: createModeCell,
+    }),
+    
+    createDataColumn<Course>("Language", {
+      ...COLUMN_CONFIGS.Language,
+      header: "Language",
+      cell: createLanguageCell,
+    }),
+    
+    createDataColumn<Course>("Duration", {
+      ...COLUMN_CONFIGS.Duration,
+      header: "Duration",
+      cell: createDurationCell,
+    }),
+  ];
+};
+
+// Separate component for the table logic
+const CatalogTableInner: React.FC<{
+  courses: Course[];
+  isLoading: boolean;
+  error: unknown;
+  onScroll?: (scrollTop: number) => void;
+}> = ({ courses, isLoading, error, onScroll }) => {
+  const [sorting, setSorting] = useAtom(tableSortingAtom);
+
+  // Create columns using native TanStack patterns
+  const columns = createCourseColumns();
+
+  const table = useReactTable({
+    data: courses || [],
+    columns,
+    getCoreRowModel: getCoreRowModel(),
+    getSortedRowModel: getSortedRowModel(),
+    state: {
+      sorting,
+    },
+    onSortingChange: setSorting,
+    columnResizeMode: "onChange" as ColumnResizeMode,
+    enableColumnResizing: true,
+    enableSorting: !isLoading && !error,
+  });
+
+  // Handle loading and error states AFTER all hooks are called
+  if (isLoading || error) {
+    return null; // CatalogBase handles loading and error states
+  }
+
+  return (
+    <div id="catalog-table" className="h-full">
+      <BaseTable
+        table={table}
+        onScroll={onScroll}
+        headerClassName="bg-slate-800"
+        rowHeight={48}
+        emptyStateMessage="No courses available"
+        loadingState={false}
+      />
+    </div>
+  );
+};
+
+const CatalogTable: React.FC<CatalogTableProps> = ({ catalogId, onScroll }) => {
+  return (
+    <div id="catalog-table-container" className="h-full">
+      <CatalogBase catalogId={catalogId}>
+        {({ courses, isLoading, error }) => (
+          <CatalogTableInner
+            courses={courses}
+            isLoading={isLoading}
+            error={error}
+            onScroll={onScroll}
+          />
+        )}
+      </CatalogBase>
+    </div>
+  );
+};
+
+export default CatalogTable;

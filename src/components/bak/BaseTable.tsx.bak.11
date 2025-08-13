@@ -1,0 +1,456 @@
+import React from "react";
+import {
+  Table,
+  flexRender,
+  ColumnResizeMode,
+  Column,
+  createColumnHelper,
+  ColumnDef,
+} from "@tanstack/react-table";
+import { GripVertical, ArrowUpDown, ArrowUp, ArrowDown } from "lucide-react";
+import { useAtom } from "jotai";
+import { atom } from "jotai";
+import { DEFAULT_TABLE } from "@/utils/constants";
+
+// Jotai atoms for table state
+const tableScrollAtom = atom<number>(0);
+const tableContainerHeightAtom = atom<number>(DEFAULT_TABLE.CONTAINER_HEIGHT);
+
+// Column configuration interfaces
+export interface ColumnSizeConfig {
+  size: number;
+  minSize: number;
+  maxSize: number;
+}
+
+export interface ColumnConfig<TData> {
+  columnOrder: string[];
+  columnExceptions: Set<string>;
+  columnSizes: Record<string, ColumnSizeConfig>;
+  cellRenderers?: Record<string, (columnKey: string, value: unknown, data: TData, rowIndex: number) => React.ReactNode>;
+  customAccessors?: Record<string, (data: TData) => any>;
+  customSortingFns?: Record<string, (rowA: any, rowB: any) => number>;
+}
+
+export const SortableHeader = <TData,>({
+  column,
+  children,
+  showDragHandle = false,
+}: {
+  column: Column<TData, unknown>;
+  children: React.ReactNode;
+  showDragHandle?: boolean;
+}) => {
+  const isSorted = column.getIsSorted();
+  const canSort = column.getCanSort();
+
+  const handleSort = (e: React.MouseEvent) => {
+    e.preventDefault();
+    if (canSort) {
+      column.toggleSorting(undefined, false);
+    }
+  };
+
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (canSort && (e.key === "Enter" || e.key === " ")) {
+      e.preventDefault();
+      column.toggleSorting(undefined, false);
+    }
+  };
+
+  return (
+    <div className="flex items-center gap-2 w-full">
+      {showDragHandle && (
+        <div
+          className="cursor-grab hover:cursor-grab active:cursor-grabbing p-1 hover:bg-slate-600 rounded transition-colors opacity-50 hover:opacity-100"
+          title="Drag to reorder column"
+          role="button"
+          tabIndex={0}
+          aria-label="Drag to reorder column"
+        >
+          <GripVertical className="w-3 h-3" />
+        </div>
+      )}
+
+      <div
+        className={`flex items-center gap-1 px-1 py-1 rounded transition-colors flex-1 min-w-0 ${
+          canSort ? "cursor-pointer select-none hover:bg-slate-700" : ""
+        }`}
+        onClick={handleSort}
+        role={canSort ? "button" : undefined}
+        tabIndex={canSort ? 0 : undefined}
+        aria-label={canSort ? `Sort by ${children}` : undefined}
+        aria-sort={
+          isSorted === "asc"
+            ? "ascending"
+            : isSorted === "desc"
+              ? "descending"
+              : canSort
+                ? "none"
+                : undefined
+        }
+        onKeyDown={handleKeyDown}
+      >
+        <span className="truncate">{children}</span>
+        {canSort && (
+          <div className="w-4 h-4 flex items-center justify-center flex-shrink-0">
+            {isSorted === "asc" ? (
+              <ArrowUp className="w-3 h-3" />
+            ) : isSorted === "desc" ? (
+              <ArrowDown className="w-3 h-3" />
+            ) : (
+              <ArrowUpDown className="w-3 h-3 opacity-50" />
+            )}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+};
+
+// Default cell renderer for generic data
+export const DefaultCellRenderer = <TData,>({
+  columnKey,
+  value,
+  data,
+  rowIndex,
+}: {
+  columnKey: string;
+  value: unknown;
+  data: TData;
+  rowIndex: number;
+}) => {
+  const cellId = `${columnKey.toLowerCase()}-${rowIndex}`;
+  const baseClassName = "h-12 flex items-center px-2";
+
+  return (
+    <div id={cellId}>
+      <div className={`${baseClassName} justify-start`}>
+        <span
+          className="text-sm text-gray-700 truncate w-full"
+          title={String(value)}
+        >
+          {String(value)}
+        </span>
+      </div>
+    </div>
+  );
+};
+
+// Row number column utility
+export const createRowNumberColumn = <TData,>(
+  columnHelper: ReturnType<typeof createColumnHelper<TData>>,
+  columnSizes: Record<string, ColumnSizeConfig>
+): ColumnDef<TData> => {
+  const rowNumSizes = columnSizes["#"] || {
+    size: DEFAULT_TABLE.COLUMN_WIDTH.XSMALL,
+    minSize: DEFAULT_TABLE.COLUMN_LIMITS.MIN_XSMALL,
+    maxSize: DEFAULT_TABLE.COLUMN_LIMITS.MAX_XSMALL,
+  };
+
+  return columnHelper.display({
+    id: "#",
+    header: ({ column }) => (
+      <SortableHeader column={column}>
+        <span className="text-xs">#</span>
+      </SortableHeader>
+    ),
+    cell: ({ row }) => (
+      <div id={`row-number-${row.index}`} className="h-12 flex items-center px-2 justify-end">
+        <span className="text-sm font-mono text-gray-600 font-medium">
+          {row.index + 1}
+        </span>
+      </div>
+    ),
+    size: rowNumSizes.size,
+    minSize: rowNumSizes.minSize,
+    maxSize: rowNumSizes.maxSize,
+    enableResizing: true,
+    enableSorting: true,
+    sortingFn: (rowA, rowB) => rowA.index - rowB.index,
+    meta: {
+      isRowNumber: true,
+    },
+  });
+};
+
+// Get ordered column keys utility
+export const getOrderedColumnKeys = <TData extends Record<string, any>>(
+  data: TData[],
+  columnOrder: string[],
+  columnExceptions: Set<string>
+): string[] => {
+  if (data.length === 0) return [];
+  
+  // Get all property keys from the first item and filter out exceptions
+  const allKeys = Object.keys(data[0]).filter(key => !columnExceptions.has(key));
+  
+  // Create ordered list: specified order first, then remaining keys
+  const orderedKeys = columnOrder.filter(key => allKeys.includes(key));
+  const remainingKeys = allKeys.filter(key => !columnOrder.includes(key));
+  
+  return [...orderedKeys, ...remainingKeys];
+};
+
+// Create data column utility
+export const createDataColumn = <TData,>(
+  columnHelper: ReturnType<typeof createColumnHelper<TData>>,
+  key: string,
+  columnSizes: Record<string, ColumnSizeConfig>,
+  cellRenderer: (columnKey: string, value: unknown, data: TData, rowIndex: number) => React.ReactNode,
+  customAccessor?: (data: TData) => any,
+  customSortingFn?: (rowA: any, rowB: any) => number
+): ColumnDef<TData> => {
+  const sizes = columnSizes[key] || {
+    size: DEFAULT_TABLE.COLUMN_WIDTH.LARGE,
+    minSize: DEFAULT_TABLE.COLUMN_LIMITS.MIN_LARGE,
+    maxSize: DEFAULT_TABLE.COLUMN_LIMITS.MAX_LARGE,
+  };
+
+  const baseColumnDef = {
+    id: key,
+    header: ({ column }: { column: Column<TData, unknown> }) => (
+      <SortableHeader column={column}>
+        <span className="text-xs">{key}</span>
+      </SortableHeader>
+    ),
+    cell: ({ getValue, row }: { getValue: () => any; row: { original: TData; index: number } }) => 
+      cellRenderer(key, getValue(), row.original, row.index),
+    size: sizes.size,
+    minSize: sizes.minSize,
+    maxSize: sizes.maxSize,
+    enableResizing: true,
+    enableSorting: true,
+  };
+
+  if (customAccessor) {
+    return columnHelper.accessor(customAccessor, {
+      ...baseColumnDef,
+      ...(customSortingFn && { sortingFn: customSortingFn }),
+    });
+  }
+
+  return columnHelper.accessor(key as keyof TData, baseColumnDef);
+};
+
+// Main column generation function - now data-agnostic
+export const createColumnsFromConfig = <TData extends Record<string, any>>(
+  data: TData[],
+  config: ColumnConfig<TData>
+): ColumnDef<TData>[] => {
+  if (data.length === 0) return [];
+
+  const columns: ColumnDef<TData>[] = [];
+  const columnHelper = createColumnHelper<TData>();
+
+  // Add row number column
+  columns.push(createRowNumberColumn(columnHelper, config.columnSizes));
+
+  // Get ordered column keys
+  const orderedKeys = getOrderedColumnKeys(
+    data,
+    config.columnOrder,
+    config.columnExceptions,
+  );
+
+  // Create data columns
+  orderedKeys.forEach((key) => {
+    const cellRenderer = config.cellRenderers?.[key] || DefaultCellRenderer;
+    const customAccessor = config.customAccessors?.[key];
+    const customSortingFn = config.customSortingFns?.[key];
+
+    columns.push(
+      createDataColumn(
+        columnHelper,
+        key,
+        config.columnSizes,
+        cellRenderer,
+        customAccessor,
+        customSortingFn,
+      ),
+    );
+  });
+
+  return columns;
+};
+
+interface BaseTableProps<TData> {
+  table: Table<TData>;
+  onScroll?: (scrollTop: number) => void;
+  headerClassName?: string;
+  containerClassName?: string;
+  rowHeight?: number;
+  renderFooter?: () => React.ReactNode;
+  columnResizeMode?: ColumnResizeMode;
+  emptyStateMessage?: string;
+  loadingState?: boolean;
+}
+
+const BaseTable = <TData,>({
+  table,
+  onScroll,
+  headerClassName = "bg-slate-800",
+  containerClassName = "",
+  rowHeight = DEFAULT_TABLE.ROW_HEIGHT,
+  renderFooter,
+  emptyStateMessage = "No data available",
+  loadingState = false,
+}: BaseTableProps<TData>) => {
+  const [scrollTop, setScrollTop] = useAtom(tableScrollAtom);
+  const [containerHeight] = useAtom(tableContainerHeightAtom);
+
+  const handleScroll = (e: React.UIEvent<HTMLDivElement>) => {
+    const newScrollTop = e.currentTarget.scrollTop;
+    setScrollTop(newScrollTop);
+    if (onScroll) {
+      onScroll(newScrollTop);
+    }
+  };
+
+  // Get table data
+  const rows = table.getRowModel().rows;
+  const headerGroups = table.getHeaderGroups();
+  const totalWidth = table.getTotalSize();
+
+  const renderEmptyState = () => (
+    <div id="table-empty-state" className="flex items-center justify-center h-32 text-gray-500">
+      <p>{emptyStateMessage}</p>
+    </div>
+  );
+
+  const renderLoadingState = () => (
+    <div id="table-loading-state" className="flex items-center justify-center h-32">
+      <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-slate-600"></div>
+    </div>
+  );
+
+  return (
+    <div id="base-table-container" className={`flex flex-col h-full ${containerClassName}`}>
+      <div className="flex-1 overflow-hidden">
+        <div className="h-full flex flex-col">
+          {/* Fixed Header */}
+          <div id="table-header" className="sticky top-0 z-10 border-b border-gray-200 overflow-hidden">
+            <div
+              className={`${headerClassName} w-full`}
+              style={{
+                minWidth: totalWidth,
+                overflowX: "hidden",
+              }}
+            >
+              {headerGroups.map((headerGroup) => (
+                <div key={headerGroup.id} className="flex w-full">
+                  {headerGroup.headers.map((header) => {
+                    const resizeHandler = header.getResizeHandler();
+
+                    return (
+                      <div
+                        key={header.id}
+                        className="text-white font-semibold px-1 py-3 border-r border-slate-700 relative bg-slate-800"
+                        style={{
+                          width: header.getSize(),
+                          minWidth: header.getSize(),
+                          height: "56px",
+                        }}
+                      >
+                        {header.isPlaceholder ? null : (
+                          <>
+                            <div className="h-full flex items-center">
+                              {flexRender(
+                                header.column.columnDef.header,
+                                header.getContext(),
+                              )}
+                            </div>
+                            {/* Column resizer */}
+                            {header.column.getCanResize() && (
+                              <div
+                                className={`absolute right-0 top-0 h-full w-1 cursor-col-resize hover:bg-slate-500 transition-colors ${
+                                  header.column.getIsResizing()
+                                    ? "bg-slate-400 opacity-100"
+                                    : "bg-slate-600 opacity-0 hover:opacity-100"
+                                }`}
+                                onMouseDown={resizeHandler}
+                                onTouchStart={resizeHandler}
+                                role="separator"
+                                aria-label={`Resize column ${header.column.id}`}
+                                tabIndex={0}
+                                style={{
+                                  transform: header.column.getIsResizing()
+                                    ? "scaleX(2)"
+                                    : "scaleX(1)",
+                                }}
+                              />
+                            )}
+                          </>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* Scrollable Body */}
+          <div className="flex-1">
+            <div
+              id="table-body"
+              className="overflow-auto pb-4"
+              style={{ height: containerHeight }}
+              onScroll={handleScroll}
+              role="grid"
+              aria-label="Data table"
+              aria-rowcount={rows.length}
+              aria-colcount={table.getAllColumns().length}
+            >
+              <div className="w-full" style={{ width: totalWidth }}>
+                {loadingState
+                  ? renderLoadingState()
+                  : rows.length === 0
+                    ? renderEmptyState()
+                    : rows.map((row, index) => {
+                        const rowClass =
+                          index % 2 === 0 ? "bg-white" : "bg-gray-50";
+
+                        return (
+                          <div
+                            key={row.id}
+                            className={`flex border-b border-gray-200 hover:bg-orange-50 transition-colors ${rowClass}`}
+                            style={{ height: rowHeight }}
+                            role="row"
+                            aria-rowindex={index + 2}
+                          >
+                            {row.getVisibleCells().map((cell, cellIndex) => (
+                              <div
+                                key={cell.id}
+                                className="px-1 py-1 flex items-center border-r border-gray-200 last:border-r-0"
+                                style={{
+                                  width: cell.column.getSize(),
+                                  minWidth: cell.column.getSize(),
+                                }}
+                                role="gridcell"
+                                aria-colindex={cellIndex + 1}
+                              >
+                                {flexRender(
+                                  cell.column.columnDef.cell,
+                                  cell.getContext(),
+                                )}
+                              </div>
+                            ))}
+                          </div>
+                        );
+                      })}
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+      {renderFooter && (
+        <div id="table-footer" className="flex-shrink-0 border-t border-gray-200">
+          {renderFooter()}
+        </div>
+      )}
+    </div>
+  );
+};
+
+export default BaseTable;

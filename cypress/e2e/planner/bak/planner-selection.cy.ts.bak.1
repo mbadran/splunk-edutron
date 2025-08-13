@@ -1,0 +1,82 @@
+/**
+ * Planner Selection Tests
+ *
+ * Tests course selection functionality in the Planner MonoTable.
+ * Covers clicking selection squares, visual feedback, and calculator updates.
+ */
+
+// Import utilities - fixed path
+import {
+  PLANNER_CONSTANTS,
+  extractPriceFromRow,
+  selectCourseForMember,
+  verifySelectionState,
+  convertUsdToTuDisplay,
+  waitForPlannerReady,
+  verifyCalculatorTotal
+} from '../../support/plannerUtils';
+
+// Test configuration constants
+const TEST_CONFIG = {
+  LOAD_TIMEOUT: 2000,
+  BASIC_SELECTION_COUNT: 3,
+  CALCULATOR_TEST_COUNT: 10,
+  FIRST_TEAM_MEMBER_COLUMN: 10,
+};
+
+describe("Planner - Selection", () => {
+  beforeEach(() => {
+    cy.visit("/planner");
+    cy.wait(TEST_CONFIG.LOAD_TIMEOUT);
+    waitForPlannerReady();
+  });
+
+  it("simulates the user selecting courses for the initial team member", () => {
+    // Verify initial calculator state
+    verifyCalculatorTotal(0);
+
+    // Select courses and verify visual feedback
+    for (let i = 1; i <= TEST_CONFIG.BASIC_SELECTION_COUNT; i++) {
+      cy.get(`#table-row-${i}`).should("be.visible");
+      
+      // Verify unselected state
+      verifySelectionState(i, false, TEST_CONFIG.FIRST_TEAM_MEMBER_COLUMN);
+
+      // Select course
+      selectCourseForMember(i, TEST_CONFIG.FIRST_TEAM_MEMBER_COLUMN);
+
+      // Verify selected state
+      verifySelectionState(i, true, TEST_CONFIG.FIRST_TEAM_MEMBER_COLUMN);
+      
+      cy.log(`✓ Selected course ${i}/${TEST_CONFIG.BASIC_SELECTION_COUNT}`);
+    }
+
+    cy.log(`✅ Successfully selected ${TEST_CONFIG.BASIC_SELECTION_COUNT} courses`);
+  });
+
+  it("DEBUG: verifies that the calculator adds course selection totals", () => {
+    cy.log(`🔍 Simple test: Just extract row 9 price and see what happens...`);
+    
+    // Just test the basic extraction first
+    extractPriceFromRow(9).then((price9) => {
+      console.log(`Row 9 price: ${price9}`);
+      
+      // Now try the problematic pattern with ONE iteration
+      cy.log(`🔍 Now testing the problematic return pattern...`);
+      
+      extractPriceFromRow(9).then((priceUsd) => {
+        console.log(`Got price: ${priceUsd}`);
+        
+        // THIS IS THE SUSPECTED PROBLEM:
+        // Call cy.log() then return a sync value
+        cy.log(`About to do the bad thing...`);
+        cy.log(`Row 9: ${priceUsd}`);  // ← ASYNC COMMAND
+        
+        console.log(`About to return sync value: ${priceUsd}`);
+        return priceUsd;  // ← SYNC RETURN - ERROR?
+      }).then((returnedValue) => {
+        cy.log(`If you see this, it worked! Got: ${returnedValue}`);
+      });
+    });
+  });
+});

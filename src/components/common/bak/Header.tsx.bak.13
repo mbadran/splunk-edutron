@@ -1,0 +1,159 @@
+import React, { lazy, Suspense } from "react";
+import { useAtom } from "jotai";
+import Navigation from "./Navigation";
+import Title from "./Title";
+import Notes from "./Notes";
+import {
+  planStateAtom,
+  updateTitleAtom,
+  updateNotesAtom,
+} from "@/atoms/globalAtoms";
+
+// Conditional imports for planner-specific components
+const PlanActions = lazy(() => import("@/components/PlanActions"));
+const PlanCalculator = lazy(() => import("@/components/PlanCalculator"));
+
+interface HeaderProps {
+  onBackToHome: () => void;
+  pageTitle: string;
+  onUpdateTitle?: (title: string) => void;
+  onUndo?: () => void;
+  onRedo?: () => void;
+  onExportJSON?: () => void;
+  canUndo?: boolean;
+  canRedo?: boolean;
+  total?: number;
+  onBudgetChange?: (budget: number | null) => void;
+  currentRoute?: string;
+  onNavigate?: (route: string) => void;
+}
+
+const Header: React.FC<HeaderProps> = ({
+  onBackToHome,
+  pageTitle,
+  onUpdateTitle,
+  onUndo,
+  onRedo,
+  onExportJSON,
+  canUndo = false,
+  canRedo = false,
+  total,
+  onBudgetChange,
+  currentRoute = "",
+  onNavigate,
+}) => {
+  // Get plan state for planner-specific features
+  const [planState] = useAtom(planStateAtom);
+  const [, updateTitle] = useAtom(updateTitleAtom);
+  const [, updateNotes] = useAtom(updateNotesAtom);
+
+  // Fix route detection - check if current path includes planner
+  const isPlannerRoute =
+    currentRoute.includes("/planner") ||
+    (typeof window !== "undefined" &&
+      window.location.pathname.includes("/planner"));
+  const showPlanActions = isPlannerRoute && onUndo && onRedo && onExportJSON;
+  const showCalculator =
+    isPlannerRoute && total !== undefined && onBudgetChange;
+  const showPlanId = isPlannerRoute;
+  const showPlanNotes = isPlannerRoute;
+
+  // Handle title updates through both props and atoms
+  const handleTitleUpdate = (newTitle: string) => {
+    if (isPlannerRoute) {
+      // Use atom for planner routes
+      updateTitle(newTitle);
+    } else if (onUpdateTitle) {
+      // Use prop callback for other routes
+      onUpdateTitle(newTitle);
+    }
+  };
+
+  return (
+    <div
+      id="app-header"
+      className="bg-gradient-to-br from-slate-800 via-slate-700 to-blue-900 shadow-lg border-b-2 border-orange-500 sticky top-0 z-20"
+    >
+      <div className="px-4 sm:px-6 py-4">
+        {/* CSS Grid Layout: Navigation | Content | Calculator */}
+        <div className="grid grid-cols-[auto_1fr_auto] gap-4 items-start">
+          {/* Column 1: Navigation and Plan ID */}
+          <div className="flex-shrink-0">
+            <Navigation
+              onBackToHome={onBackToHome}
+              currentRoute={currentRoute}
+              onNavigate={onNavigate}
+            />
+
+            {/* Plan ID Row - aligned with notes */}
+            {showPlanId && (
+              <div className="mt-2 flex items-center h-12">
+                <div className="text-md font-regular text-gray-300">
+                  [{planState.id}]
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* Column 2: Content (Title, Notes, Actions) */}
+          <div className="min-w-0 overflow-hidden">
+            {/* Title Row */}
+            <div className="mb-2">
+              <Title
+                title={isPlannerRoute ? planState.title : pageTitle}
+                onUpdate={handleTitleUpdate}
+                currentRoute={currentRoute}
+              />
+            </div>
+
+            {/* Notes Row - only for planner */}
+            {showPlanNotes && (
+              <div className="mb-4">
+                <Notes
+                  notes={planState.notes || ""}
+                  onUpdate={updateNotes}
+                  placeholder="Notes..."
+                  isEditable={true}
+                />
+              </div>
+            )}
+
+            {/* Actions Row - left-aligned under notes */}
+            {showPlanActions && (
+              <div className="flex justify-start">
+                <Suspense
+                  fallback={
+                    <div className="w-32 h-8 bg-gray-200 animate-pulse rounded"></div>
+                  }
+                >
+                  <PlanActions
+                    onUndo={onUndo}
+                    onRedo={onRedo}
+                    onExportJSON={onExportJSON}
+                    canUndo={canUndo}
+                    canRedo={canRedo}
+                  />
+                </Suspense>
+              </div>
+            )}
+          </div>
+
+          {/* Column 3: Calculator */}
+          {showCalculator && (
+            <div className="flex-shrink-0 mr-2">
+              <Suspense
+                fallback={
+                  <div className="w-32 h-12 bg-gray-200 animate-pulse rounded"></div>
+                }
+              >
+                <PlanCalculator total={total} onBudgetChange={onBudgetChange} />
+              </Suspense>
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+};
+
+export default Header;

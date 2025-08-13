@@ -1,0 +1,227 @@
+import React, { useState, useEffect } from 'react';
+import { ExternalLink, PenTool, Monitor, Users, GraduationCap } from 'lucide-react';
+import Header from './Header';
+import Catalog from './Catalog';
+import Team from './Team';
+import Footer from './Footer';
+
+const WelcomeScreen = ({ onCreatePlan, onLoadPlan }) => {
+  return (
+    <div 
+      className="min-h-screen flex items-center justify-center p-4 relative"
+      style={{
+        backgroundImage: 'url(/img/luis-tosta-COAbFWdOf5s-unsplash.jpg)',
+        backgroundSize: 'cover',
+        backgroundPosition: 'center',
+        backgroundRepeat: 'no-repeat'
+      }}
+    >
+      <div className="max-w-2xl mx-auto text-center">
+        <div className="bg-gradient-to-br from-slate-800/90 via-slate-700/90 to-blue-900/90 backdrop-blur-md rounded-3xl p-12 shadow-2xl border border-white/20">
+          <div className="mb-8">
+            <div className="inline-flex items-center justify-center w-20 h-20 bg-white/20 backdrop-blur-sm rounded-2xl mb-6">
+              <GraduationCap className="w-10 h-10 text-white" />
+            </div>
+            <h1 className="text-5xl md:text-6xl font-bold text-white mb-4 tracking-tight">
+              Splunk <span className="text-orange-300">EDUTRON</span>
+            </h1>
+            <p className="text-lg text-white/90 font-light mb-2">
+              <em>The Missing Splunk EDU Training Planner</em>
+            </p>
+          </div>
+
+          <div className="space-y-4 mb-8">
+            <button 
+              onClick={onCreatePlan}
+              className="w-full bg-white text-gray-800 hover:bg-gray-50 font-semibold py-4 px-8 rounded-xl transition-all duration-200 transform hover:scale-105 hover:shadow-lg flex items-center justify-center gap-3"
+            >
+              <PenTool className="w-5 h-5" />
+              Create Training Plan
+            </button>
+            
+            <button 
+              onClick={onLoadPlan}
+              className="w-full bg-transparent border-2 border-white text-white hover:bg-white hover:text-gray-800 font-semibold py-4 px-8 rounded-xl transition-all duration-200 transform hover:scale-105 flex items-center justify-center gap-3"
+            >
+              <ExternalLink className="w-5 h-5" />
+              Upload Existing Plan
+            </button>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-sm text-white/80">
+            <div className="flex items-center gap-2">
+              <Monitor className="w-4 h-4" />
+              <span>Interactive Planning</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <Users className="w-4 h-4" />
+              <span>Team Support</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <ExternalLink className="w-4 h-4" />
+              <span>STEP Integration</span>
+            </div>
+          </div>
+        </div>
+      </div>
+      
+      <Footer />
+    </div>
+  );
+};
+
+const PlanBuilder = ({ onBackToWelcome }) => {
+  const [planTitle, setPlanTitle] = useState('Pied Piper / Splunk Training Plan');
+  const [courses, setCourses] = useState([]);
+  const [isResizing, setIsResizing] = useState(false);
+  const [leftWidth, setLeftWidth] = useState(50);
+
+  useEffect(() => {
+    document.title = "Splunk EDUTRON — Create Training Plan";
+    
+    const handlePopState = (event) => {
+      onBackToWelcome();
+    };
+
+    window.addEventListener('popstate', handlePopState);
+    
+    return () => {
+      window.removeEventListener('popstate', handlePopState);
+    };
+  }, [onBackToWelcome]);
+
+  useEffect(() => {
+    const handleMouseMove = (e) => {
+      if (!isResizing) return;
+      
+      const containerRect = document.querySelector('.plan-container').getBoundingClientRect();
+      const newLeftWidth = ((e.clientX - containerRect.left) / containerRect.width) * 100;
+      
+      if (newLeftWidth >= 30 && newLeftWidth <= 70) {
+        setLeftWidth(newLeftWidth);
+      }
+    };
+
+    const handleMouseUp = () => {
+      setIsResizing(false);
+    };
+
+    if (isResizing) {
+      document.addEventListener('mousemove', handleMouseMove);
+      document.addEventListener('mouseup', handleMouseUp);
+    }
+
+    return () => {
+      document.removeEventListener('mousemove', handleMouseMove);
+      document.removeEventListener('mouseup', handleMouseUp);
+    };
+  }, [isResizing]);
+
+  const handleUpdateTitle = (newTitle) => {
+    setPlanTitle(newTitle);
+  };
+
+  const handleSave = () => {
+    alert('Save functionality coming soon! This will provide a download option.');
+  };
+
+  const handleCoursesLoad = (loadedCourses) => {
+    setCourses(loadedCourses);
+  };
+
+  const handleMouseDown = () => {
+    setIsResizing(true);
+  };
+
+  return (
+    <div className="min-h-screen bg-gray-100 flex flex-col">
+      <Header
+        onBackToWelcome={onBackToWelcome}
+        planTitle={planTitle}
+        onUpdateTitle={handleUpdateTitle}
+        onSave={handleSave}
+        teamCount={0}
+        courseCount={courses.length}
+        selectedCount={0}
+      />
+
+      <div className="flex-1 p-6 bg-gray-100 mt-6">
+        <div className="bg-white rounded-xl shadow-lg overflow-hidden border border-gray-200 h-[calc(100vh-200px)]">
+          <div className="flex h-full plan-container">
+            <div 
+              className="overflow-hidden border-r border-gray-300"
+              style={{ width: `${leftWidth}%` }}
+            >
+              <Catalog 
+                onBackToWelcome={onBackToWelcome}
+                onCoursesLoad={handleCoursesLoad}
+              />
+            </div>
+            
+            <div 
+              className="w-1 bg-gray-300 hover:bg-orange-400 cursor-col-resize flex items-center justify-center transition-colors relative group"
+              onMouseDown={handleMouseDown}
+            >
+              <div className="w-1 h-8 bg-gray-400 group-hover:bg-orange-500 rounded-full"></div>
+            </div>
+            
+            <div 
+              className="overflow-hidden"
+              style={{ width: `${100 - leftWidth}%` }}
+            >
+              <Team courses={courses} />
+            </div>
+          </div>
+        </div>
+      </div>
+      
+      <Footer />
+    </div>
+  );
+};
+
+const SplunkEdutron = () => {
+  const [currentScreen, setCurrentScreen] = useState('welcome');
+
+  useEffect(() => {
+    document.title = "Splunk EDUTRON — Create, Manage, and Sell Splunk EDU Training Plans";
+    
+    if (window.location.hash === '#create') {
+      setCurrentScreen('create');
+    }
+  }, []);
+
+  const handleCreatePlan = () => {
+    setCurrentScreen('create');
+    window.history.pushState({ page: 'create' }, '', '/#create');
+  };
+
+  const handleBackToWelcome = () => {
+    setCurrentScreen('welcome');
+    window.history.replaceState(null, '', '/');
+    document.title = "Splunk EDUTRON — Create, Manage, and Sell Splunk EDU Training Plans";
+  };
+
+  const handleLoadPlan = () => {
+    alert('Load functionality coming soon!');
+  };
+
+  return (
+    <div className="min-h-screen">
+      {currentScreen === 'welcome' && (
+        <WelcomeScreen 
+          onCreatePlan={handleCreatePlan}
+          onLoadPlan={handleLoadPlan}
+        />
+      )}
+      
+      {currentScreen === 'create' && (
+        <PlanBuilder 
+          onBackToWelcome={handleBackToWelcome}
+        />
+      )}
+    </div>
+  );
+};
+
+export default SplunkEdutron;

@@ -1,0 +1,18 @@
+import React from 'react';
+import TeamHelp from './TeamHelp';
+import TeamActions from './TeamActions';
+
+interface TeamControlsProps {
+  onAddTeamMember: () => void;
+}
+
+const TeamControls = ({ onAddTeamMember }: TeamControlsProps) => {
+  return (
+    <div>
+      <TeamHelp />
+      <TeamActions onAddTeamMember={onAddTeamMember} />
+    </div>
+  );
+};
+
+export default TeamControls;

@@ -1,0 +1,283 @@
+import React from "react";
+import {
+  useReactTable,
+  getCoreRowModel,
+  getSortedRowModel,
+  ColumnResizeMode,
+} from "@tanstack/react-table";
+import { User, Mail, UserCheck, Trash2 } from "lucide-react";
+import { useAtom } from "jotai";
+import { atomWithStorage } from "jotai/utils";
+import BaseTable, {
+  createColumnsFromConfig,
+  ColumnConfig,
+  ColumnSizeConfig,
+} from "@/components/common/BaseTable";
+import TeamBase from "./TeamBase";
+import { Person } from "@/types/types";
+import { DEFAULT_TABLE } from "@/utils/constants";
+
+interface TeamTableProps {
+  onScroll?: (scrollTop: number) => void;
+}
+
+// Jotai atoms for state management
+const tableSortingAtom = atomWithStorage("team-table-sorting", []);
+
+// Configuration constants - ONLY exclude fields that should never be displayed
+const COLUMN_EXCEPTIONS = new Set<string>([
+  // No exceptions for Person fields currently
+]);
+
+// Define column order - columns not in this list will be added at the end
+const COLUMN_ORDER = ["name", "email", "role", "actions"];
+
+// Column size configuration
+const COLUMN_SIZES: Record<string, ColumnSizeConfig> = {
+  "#": {
+    size: DEFAULT_TABLE.COLUMN_WIDTH.XSMALL,
+    minSize: DEFAULT_TABLE.COLUMN_LIMITS.MIN_XSMALL,
+    maxSize: DEFAULT_TABLE.COLUMN_LIMITS.MAX_XSMALL,
+  },
+  name: {
+    size: DEFAULT_TABLE.COLUMN_WIDTH.XLARGE,
+    minSize: DEFAULT_TABLE.COLUMN_LIMITS.MIN_LARGE,
+    maxSize: DEFAULT_TABLE.COLUMN_LIMITS.MAX_XLARGE,
+  },
+  email: {
+    size: DEFAULT_TABLE.COLUMN_WIDTH.XLARGE,
+    minSize: DEFAULT_TABLE.COLUMN_LIMITS.MIN_LARGE,
+    maxSize: DEFAULT_TABLE.COLUMN_LIMITS.MAX_XLARGE,
+  },
+  role: {
+    size: DEFAULT_TABLE.COLUMN_WIDTH.LARGE,
+    minSize: DEFAULT_TABLE.COLUMN_LIMITS.MIN_MEDIUM,
+    maxSize: DEFAULT_TABLE.COLUMN_LIMITS.MAX_LARGE,
+  },
+  actions: {
+    size: DEFAULT_TABLE.COLUMN_WIDTH.SMALL,
+    minSize: DEFAULT_TABLE.COLUMN_LIMITS.MIN_SMALL,
+    maxSize: DEFAULT_TABLE.COLUMN_LIMITS.MAX_SMALL,
+  },
+};
+
+// Universal cell renderer function that handles all columns
+const createUniversalCellRenderer = () => {
+  const baseClassName = "h-12 flex items-center px-2";
+
+  return (
+    columnKey: string,
+    value: unknown,
+    teamMember: Person,
+    rowIndex: number,
+    actions?: {
+      updateMember: (id: string, updates: Partial<Person>) => void;
+      deleteMember: (id: string) => void;
+    },
+  ) => {
+    const cellId = `team-member-${columnKey.toLowerCase()}-${rowIndex}`;
+
+    // Handle each column type with specific styling
+    switch (columnKey) {
+      case "name":
+        return (
+          <div id={cellId}>
+            <div className={`${baseClassName} justify-start`}>
+              <div className="flex items-center gap-2">
+                <User className="w-4 h-4 text-gray-500" />
+                <input
+                  type="text"
+                  value={String(value)}
+                  onChange={(e) =>
+                    actions?.updateMember(teamMember.id, {
+                      name: e.target.value,
+                    })
+                  }
+                  className="flex-1 bg-transparent border-none outline-none focus:bg-white focus:shadow-sm focus:px-2 focus:py-1 focus:rounded transition-all"
+                  placeholder="Enter name"
+                />
+              </div>
+            </div>
+          </div>
+        );
+
+      case "email":
+        return (
+          <div id={cellId}>
+            <div className={`${baseClassName} justify-start`}>
+              <div className="flex items-center gap-2 w-full">
+                <Mail className="w-4 h-4 text-gray-500" />
+                <input
+                  type="email"
+                  value={String(value || "")}
+                  onChange={(e) =>
+                    actions?.updateMember(teamMember.id, {
+                      email: e.target.value,
+                    })
+                  }
+                  className="flex-1 bg-transparent border-none outline-none focus:bg-white focus:shadow-sm focus:px-2 focus:py-1 focus:rounded transition-all"
+                  placeholder="Enter email"
+                />
+              </div>
+            </div>
+          </div>
+        );
+
+      case "role":
+        return (
+          <div id={cellId}>
+            <div className={`${baseClassName} justify-start`}>
+              <div className="flex items-center gap-2 w-full">
+                <UserCheck className="w-4 h-4 text-gray-500" />
+                <input
+                  type="text"
+                  value={String(value || "")}
+                  onChange={(e) =>
+                    actions?.updateMember(teamMember.id, {
+                      role: e.target.value,
+                    })
+                  }
+                  className="flex-1 bg-transparent border-none outline-none focus:bg-white focus:shadow-sm focus:px-2 focus:py-1 focus:rounded transition-all"
+                  placeholder="Enter role"
+                />
+              </div>
+            </div>
+          </div>
+        );
+
+      case "actions":
+        return (
+          <div id={cellId}>
+            <div className={`${baseClassName} justify-center`}>
+              <button
+                onClick={() => actions?.deleteMember(teamMember.id)}
+                className="text-red-600 hover:text-red-800 hover:bg-red-50 p-1 rounded transition-colors"
+                title="Delete team member"
+              >
+                <Trash2 className="w-4 h-4" />
+              </button>
+            </div>
+          </div>
+        );
+
+      // Default case for any unknown columns
+      default:
+        return (
+          <div id={cellId}>
+            <div className={`${baseClassName} justify-start`}>
+              <span
+                className="text-sm text-gray-700 truncate w-full overflow-hidden text-ellipsis whitespace-nowrap"
+                title={String(value || "")}
+              >
+                {String(value || "")}
+              </span>
+            </div>
+          </div>
+        );
+    }
+  };
+};
+
+// Column configuration for TeamMember data
+const createTeamMemberColumnConfig = (
+  updateMember: (id: string, updates: Partial<Person>) => void,
+  deleteMember: (id: string) => void,
+): ColumnConfig<Person> => {
+  const universalCellRenderer = createUniversalCellRenderer();
+
+  return {
+    columnOrder: COLUMN_ORDER,
+    columnExceptions: COLUMN_EXCEPTIONS,
+    columnSizes: COLUMN_SIZES,
+    // Set a default cell renderer that will be used for ALL columns
+    defaultCellRenderer: (columnKey, value, teamMember, rowIndex) =>
+      universalCellRenderer(columnKey, value, teamMember, rowIndex, {
+        updateMember,
+        deleteMember,
+      }),
+    customAccessors: {
+      // Actions column doesn't need an accessor since it's not based on data
+      actions: () => "",
+    },
+    customSortingFns: {
+      // Actions column shouldn't be sortable
+      actions: () => 0,
+    },
+  };
+};
+
+// Separate component for the table logic to ensure hooks are called consistently
+const TeamTableInner: React.FC<{
+  teamMembers: Person[];
+  isLoading: boolean;
+  error: unknown;
+  updateMember: (id: string, updates: Partial<Person>) => void;
+  deleteMember: (id: string) => void;
+  onScroll?: (scrollTop: number) => void;
+}> = ({
+  teamMembers,
+  isLoading,
+  error,
+  updateMember,
+  deleteMember,
+  onScroll,
+}) => {
+  const [sorting, setSorting] = useAtom(tableSortingAtom);
+
+  // Create columns using BaseTable's configuration-driven approach
+  const columnConfig = createTeamMemberColumnConfig(updateMember, deleteMember);
+  const columns = createColumnsFromConfig(teamMembers || [], columnConfig);
+
+  const table = useReactTable({
+    data: teamMembers || [],
+    columns,
+    getCoreRowModel: getCoreRowModel(),
+    getSortedRowModel: getSortedRowModel(),
+    state: {
+      sorting,
+    },
+    onSortingChange: setSorting,
+    columnResizeMode: "onChange" as ColumnResizeMode,
+    enableColumnResizing: true,
+    enableSorting: !isLoading && !error,
+  });
+
+  // Handle loading and error states AFTER all hooks are called
+  if (isLoading || error) {
+    return null; // TeamBase handles loading and error states
+  }
+
+  return (
+    <div id="team-table" className="h-full">
+      <BaseTable
+        table={table}
+        onScroll={onScroll}
+        headerClassName="bg-slate-800"
+        rowHeight={48}
+        emptyStateMessage="No team members available"
+        loadingState={false}
+      />
+    </div>
+  );
+};
+
+const TeamTable: React.FC<TeamTableProps> = ({ onScroll }) => {
+  return (
+    <div id="team-table-container" className="h-full">
+      <TeamBase>
+        {({ teamMembers, isLoading, error, updateMember, deleteMember }) => (
+          <TeamTableInner
+            teamMembers={teamMembers}
+            isLoading={isLoading}
+            error={error}
+            updateMember={updateMember}
+            deleteMember={deleteMember}
+            onScroll={onScroll}
+          />
+        )}
+      </TeamBase>
+    </div>
+  );
+};
+
+export default TeamTable;

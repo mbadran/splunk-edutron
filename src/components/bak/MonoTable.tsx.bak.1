@@ -1,0 +1,506 @@
+import React, { useMemo } from "react";
+import { Plus, Edit, Check, X, Trash2 } from "lucide-react";
+import {
+  useReactTable,
+  getCoreRowModel,
+  getSortedRowModel,
+  createColumnHelper,
+  ColumnDef,
+} from "@tanstack/react-table";
+import { useAtom } from "jotai";
+import BaseTable, { SortableHeader, createRowNumberColumn, createDataColumn } from "./common/BaseTable";
+import { Course, Person } from "@/types/types";
+import { DEFAULT_TEAM_NAMES, DEFAULT_TABLE, CATEGORY_COLORS, MODE_COLORS, MODE_TOOLTIPS } from "@/utils/constants";
+import {
+  plannerCoursesAtom,
+  planStateAtom,
+  editingTeamMemberAtom,
+  editingTeamMemberValueAtom,
+  addTeamMemberAtom,
+  updateTeamMemberAtom,
+  deleteTeamMemberAtom,
+  toggleSelectionAtom,
+  createPlanSelectionKey,
+  setStatusAtom,
+} from "@/atoms/globalAtoms";
+
+const MAX_TEAM_MEMBERS = 20;
+const MEMBER_COLUMN_WIDTH = DEFAULT_TABLE.COLUMN_WIDTH.MEDIUM;
+
+const MonoTable: React.FC = () => {
+  // Global state from atoms
+  const [courses] = useAtom(plannerCoursesAtom);
+  const [planState] = useAtom(planStateAtom);
+  const [editingMember, setEditingMember] = useAtom(editingTeamMemberAtom);
+  const [editValue, setEditValue] = useAtom(editingTeamMemberValueAtom);
+  const [, addTeamMember] = useAtom(addTeamMemberAtom);
+  const [, updateTeamMember] = useAtom(updateTeamMemberAtom);
+  const [, deleteTeamMember] = useAtom(deleteTeamMemberAtom);
+  const [, toggleSelection] = useAtom(toggleSelectionAtom);
+  const [, setStatus] = useAtom(setStatusAtom);
+
+  // Initialize team members if empty
+  React.useEffect(() => {
+    if (planState.teamMembers.length === 0) {
+      const defaultMember: Person = {
+        id: `member-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+        name: DEFAULT_TEAM_NAMES[0] || "Team Member 1",
+        email: "",
+        role: "",
+      };
+      addTeamMember(defaultMember);
+    }
+  }, [planState.teamMembers.length, addTeamMember]);
+
+  // Team member management functions
+  const handleAddTeamMember = () => {
+    if (planState.teamMembers.length >= MAX_TEAM_MEMBERS) {
+      setStatus({ isWorking: false, message: `Maximum ${MAX_TEAM_MEMBERS} members allowed` });
+      return;
+    }
+
+    setStatus({ isWorking: true, message: "Adding team member..." });
+    
+    const newMemberName =
+      DEFAULT_TEAM_NAMES[planState.teamMembers.length] ||
+      `Team Member ${planState.teamMembers.length + 1}`;
+
+    const newMember: Person = {
+      id: `member-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+      name: newMemberName,
+      email: "",
+      role: "",
+    };
+
+    addTeamMember(newMember);
+  };
+
+  const handleDeleteTeamMember = (index: number) => {
+    if (planState.teamMembers.length <= 1) {
+      setStatus({ isWorking: false, message: "Cannot delete the last team member" });
+      return;
+    }
+
+    setStatus({ isWorking: true, message: "Removing team member..." });
+    deleteTeamMember(index);
+  };
+
+  const handleUpdateTeamMember = (index: number, newName: string) => {
+    const trimmedName = newName.trim();
+    if (!trimmedName) {
+      setStatus({ isWorking: false, message: "Team member name cannot be empty" });
+      return;
+    }
+
+    if (
+      planState.teamMembers.some(
+        (member, i) =>
+          i !== index &&
+          member.name.toLowerCase() === trimmedName.toLowerCase(),
+      )
+    ) {
+      setStatus({ isWorking: false, message: "Team member name already exists" });
+      return;
+    }
+
+    setStatus({ isWorking: true, message: "Updating team member..." });
+    updateTeamMember({ 
+      index, 
+      updates: { name: trimmedName }
+    });
+  };
+
+  // Editing functions
+  const startEditing = (index: number) => {
+    setEditingMember(index);
+    setEditValue(planState.teamMembers[index]?.name || "");
+  };
+
+  const saveEdit = () => {
+    if (editValue.trim() && editingMember !== null) {
+      handleUpdateTeamMember(editingMember, editValue.trim());
+    } else {
+      setEditingMember(null);
+      setEditValue("");
+    }
+  };
+
+  const cancelEdit = () => {
+    setEditingMember(null);
+    setEditValue("");
+  };
+
+  // Selection functions
+  const isSelected = (course: Course, member: Person) => {
+    const key = createPlanSelectionKey(member.name, course.ID);
+    return planState.selections[key] || false;
+  };
+
+  const handleToggleSelection = (course: Course, member: Person) => {
+    toggleSelection({ course, member });
+  };
+
+  // Selection Cell Component
+  const SelectionCell = React.memo(
+    ({ course, member }: { course: Course; member: Person }) => {
+      const selected = isSelected(course, member);
+
+      return (
+        <div className="h-12 flex items-center justify-center px-2">
+          {selected ? (
+            <button
+              onClick={() => handleToggleSelection(course, member)}
+              className="w-full h-8 flex items-center justify-center text-lg font-bold transition-all duration-200 rounded cursor-pointer bg-emerald-500 text-white hover:bg-emerald-600"
+              title={`Remove '${course.Name}' for ${member.name}`}
+              aria-label={`Remove course ${course.Name} from ${member.name}'s training plan`}
+            >
+              ●
+            </button>
+          ) : (
+            <button
+              onClick={() => handleToggleSelection(course, member)}
+              className="w-full h-8 flex items-center justify-center transition-all duration-200 rounded cursor-pointer hover:bg-orange-100"
+              title={`Add '${course.Name}' for ${member.name}`}
+              aria-label={`Add course ${course.Name} to ${member.name}'s training plan`}
+            >
+              <span className="text-gray-300 text-lg">○</span>
+            </button>
+          )}
+        </div>
+      );
+    }
+  );
+
+  SelectionCell.displayName = "SelectionCell";
+
+  // Team Member Header Component
+  const TeamMemberHeader = React.memo(
+    ({
+      member,
+      index,
+      totalMembers,
+    }: {
+      member: Person;
+      index: number;
+      totalMembers: number;
+    }) => {
+      const isEditing = editingMember === index;
+
+      if (isEditing) {
+        return (
+          <div className="flex items-center justify-center gap-1 w-full h-full px-1">
+            <input
+              id={`team-member-edit-${index}`}
+              type="text"
+              value={editValue}
+              onChange={(e) => setEditValue(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") saveEdit();
+                if (e.key === "Escape") cancelEdit();
+              }}
+              className="flex-1 h-6 px-1 text-xs text-white bg-transparent rounded border-none outline-none text-center border-b-2 border-dashed border-white/60"
+              autoFocus
+              maxLength={30}
+              onFocus={(e) => e.target.select()}
+              aria-label={`Edit team member name: ${member.name}`}
+            />
+            <div className="flex gap-1">
+              <button
+                onClick={saveEdit}
+                className="text-green-300 hover:text-green-100 p-0.5 rounded"
+                title="Save"
+                aria-label="Save team member name changes"
+              >
+                <Check className="w-3 h-3" />
+              </button>
+              <button
+                onClick={cancelEdit}
+                className="text-red-300 hover:text-red-100 p-0.5 rounded"
+                title="Cancel"
+                aria-label="Cancel editing team member name"
+              >
+                <X className="w-3 h-3" />
+              </button>
+            </div>
+          </div>
+        );
+      }
+
+      return (
+        <div className="flex items-center justify-between w-full h-full px-1">
+          <div
+            className="flex-1 text-center cursor-pointer select-none hover:bg-slate-700/50 rounded px-1 py-0.5 transition-colors min-w-0"
+            onClick={() => startEditing(index)}
+            title={`Edit ${member.name}`}
+            role="button"
+            tabIndex={0}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" || e.key === " ") {
+                e.preventDefault();
+                startEditing(index);
+              }
+            }}
+            aria-label={`Team member: ${member.name}. Click to edit.`}
+          >
+            <span className="text-sm font-semibold block truncate">
+              {member.name}
+            </span>
+          </div>
+
+          <div className="flex gap-0.5 opacity-60 hover:opacity-100 transition-opacity ml-1">
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                startEditing(index);
+              }}
+              className="p-0.5 hover:bg-slate-600 rounded transition-colors"
+              title="Edit name"
+              aria-label={`Edit ${member.name}'s name`}
+            >
+              <Edit className="w-3 h-3" />
+            </button>
+
+            {totalMembers > 1 && (
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  handleDeleteTeamMember(index);
+                }}
+                className="p-0.5 hover:bg-slate-600 hover:text-red-300 rounded transition-colors"
+                title="Delete member"
+                aria-label={`Delete ${member.name} from team`}
+              >
+                <Trash2 className="w-3 h-3" />
+              </button>
+            )}
+          </div>
+        </div>
+      );
+    }
+  );
+
+  TeamMemberHeader.displayName = "TeamMemberHeader";
+
+  // Column helper for creating columns
+  const columnHelper = createColumnHelper<Course>();
+
+  // Course data columns (these will be pinned to the left)
+  const courseColumns: ColumnDef<Course>[] = useMemo(() => [
+    // Row number column
+    createRowNumberColumn(),
+
+    // Course Name column
+    createDataColumn("Name", {
+      header: "Course Name",
+      size: DEFAULT_TABLE.COLUMN_WIDTH.XXLARGE,
+      cell: ({ getValue, row }) => (
+        <div className="h-12 flex items-center px-2">
+          <span 
+            className="text-sm text-orange-600 hover:text-orange-700 font-medium cursor-pointer truncate"
+            title={getValue() as string}
+          >
+            {getValue() as string}
+          </span>
+        </div>
+      ),
+    }),
+
+    // Category column
+    createDataColumn("Category", {
+      header: "Category",
+      size: DEFAULT_TABLE.COLUMN_WIDTH.MEDIUM,
+      cell: ({ getValue }) => {
+        const category = getValue() as string;
+        const colorClass = CATEGORY_COLORS[category] || "bg-gray-500 text-white";
+        
+        return (
+          <div className="h-12 flex items-center px-2 justify-center">
+            <span 
+              className={`px-2 py-1 rounded text-xs font-semibold ${colorClass}`}
+              title={category}
+            >
+              {category}
+            </span>
+          </div>
+        );
+      },
+    }),
+
+    // Duration column
+    createDataColumn("Duration", {
+      header: "Duration",
+      size: DEFAULT_TABLE.COLUMN_WIDTH.SMALL,
+      cell: ({ getValue }) => (
+        <div className="h-12 flex items-center px-2 justify-center">
+          <span className="text-sm text-gray-700 font-mono">
+            {getValue() as number}h
+          </span>
+        </div>
+      ),
+    }),
+
+    // Price column
+    createDataColumn("Price", {
+      header: "Price",
+      size: DEFAULT_TABLE.COLUMN_WIDTH.SMALL,
+      cell: ({ getValue }) => {
+        const price = getValue() as number;
+        return (
+          <div className="h-12 flex items-center px-2 justify-center">
+            <span className={`text-sm font-semibold ${price === 0 ? 'text-green-600' : 'text-gray-700'}`}>
+              {price === 0 ? 'Free' : `${price}`}
+            </span>
+          </div>
+        );
+      },
+    }),
+
+    // Mode column
+    createDataColumn("Mode", {
+      header: "Mode",
+      size: DEFAULT_TABLE.COLUMN_WIDTH.SMALL,
+      cell: ({ getValue }) => {
+        const mode = getValue() as string;
+        const colorClass = MODE_COLORS[mode] || "bg-gray-100 text-gray-800";
+        const tooltip = MODE_TOOLTIPS[mode] || mode;
+        
+        return (
+          <div className="h-12 flex items-center px-2 justify-center">
+            <span 
+              className={`px-2 py-1 rounded text-xs font-semibold ${colorClass}`}
+              title={tooltip}
+            >
+              {mode}
+            </span>
+          </div>
+        );
+      },
+    }),
+  ], []);
+
+  // Team member columns (these will be scrollable)
+  const teamColumns: ColumnDef<Course>[] = useMemo(() => {
+    const memberColumns = planState.teamMembers.map((member, memberIndex) => ({
+      id: `member-${member.id}`,
+      header: ({ column }: any) => (
+        <SortableHeader column={column} showDragHandle={false}>
+          <TeamMemberHeader
+            member={member}
+            index={memberIndex}
+            totalMembers={planState.teamMembers.length}
+          />
+        </SortableHeader>
+      ),
+      cell: ({ row }: any) => (
+        <SelectionCell course={row.original} member={member} />
+      ),
+      size: MEMBER_COLUMN_WIDTH,
+      minSize: DEFAULT_TABLE.COLUMN_LIMITS.MIN_MEDIUM,
+      maxSize: DEFAULT_TABLE.COLUMN_LIMITS.MAX_MEDIUM,
+      enableResizing: true,
+      enableSorting: false,
+    }));
+
+    // Add member button column
+    const addButtonColumn = {
+      id: "add-member",
+      header: ({ column }: any) => (
+        <SortableHeader column={column} showDragHandle={false}>
+          <div className="w-full h-full flex items-center justify-center">
+            <button
+              onClick={handleAddTeamMember}
+              disabled={planState.teamMembers.length >= MAX_TEAM_MEMBERS}
+              className={`w-8 h-8 bg-transparent border-none text-white transition-colors rounded flex items-center justify-center font-semibold ${
+                planState.teamMembers.length < MAX_TEAM_MEMBERS
+                  ? "hover:bg-slate-700 cursor-pointer"
+                  : "opacity-50 cursor-not-allowed"
+              }`}
+              title={
+                planState.teamMembers.length < MAX_TEAM_MEMBERS
+                  ? "Add team member"
+                  : `Maximum ${MAX_TEAM_MEMBERS} members allowed`
+              }
+              aria-label={
+                planState.teamMembers.length < MAX_TEAM_MEMBERS
+                  ? "Add new team member to training plan"
+                  : `Maximum ${MAX_TEAM_MEMBERS} team members allowed`
+              }
+            >
+              <Plus className="w-5 h-5" />
+            </button>
+          </div>
+        </SortableHeader>
+      ),
+      cell: () => <div className="h-12"></div>,
+      size: MEMBER_COLUMN_WIDTH,
+      minSize: DEFAULT_TABLE.COLUMN_LIMITS.MIN_MEDIUM,
+      maxSize: DEFAULT_TABLE.COLUMN_LIMITS.MAX_MEDIUM,
+      enableResizing: true,
+      enableSorting: false,
+    };
+
+    return [...memberColumns, addButtonColumn];
+  }, [planState.teamMembers, editingMember, editValue]);
+
+  // Combine all columns
+  const allColumns = useMemo(() => [...courseColumns, ...teamColumns], [courseColumns, teamColumns]);
+
+  // Create table with column pinning
+  const table = useReactTable({
+    data: courses || [],
+    columns: allColumns,
+    getCoreRowModel: getCoreRowModel(),
+    getSortedRowModel: getSortedRowModel(),
+    enableColumnResizing: true,
+    enableColumnPinning: true,
+    enableSorting: true,
+    columnResizeMode: "onChange",
+    initialState: {
+      columnPinning: {
+        left: ['#', 'Name', 'Category', 'Duration', 'Price', 'Mode'], // Pin course columns to left
+      },
+      sorting: [], // Default sorting can be set here
+    },
+    meta: {
+      updateData: (rowIndex: number, columnId: string, value: unknown) => {
+        // Handle any inline editing if needed in the future
+        console.log("Update data:", { rowIndex, columnId, value });
+      },
+    },
+  });
+
+  // Handle sorting status indicator
+  React.useEffect(() => {
+    const sortingState = table.getState().sorting;
+    if (sortingState.length > 0) {
+      setStatus({ isWorking: true, message: "Sorting courses..." });
+      
+      // Clear status after sorting completes
+      const timer = setTimeout(() => {
+        setStatus({ isWorking: false, message: "" });
+      }, 300);
+      
+      return () => clearTimeout(timer);
+    }
+  }, [table.getState().sorting, setStatus]);
+
+  // Empty state message
+  const emptyStateMessage = !courses || courses.length === 0
+    ? "No courses available. Please check that catalogs are loaded."
+    : "No courses available for team assignment";
+
+  return (
+    <div id="mono-table" className="h-full w-full">
+      <BaseTable
+        table={table}
+        headerClassName="bg-slate-800"
+        rowHeight={DEFAULT_TABLE.ROW_HEIGHT}
+        emptyStateMessage={emptyStateMessage}
+        loadingState={false}
+        containerClassName="h-full"
+      />
+    </div>
+  );
+};
+
+export default MonoTable;

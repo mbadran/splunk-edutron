@@ -1,0 +1,41 @@
+import React from "react";
+import { Course, Person } from "@/types/types";
+
+export interface PlanCellProps {
+  course: Course;
+  member: Person;
+  isSelected: boolean;
+  onToggle: (course: Course, member: Person) => void;
+}
+
+// Clean cell renderer for plan selection using BaseTable2 patterns
+export const PlanCell = React.memo<PlanCellProps>(
+  ({ course, member, isSelected, onToggle }) => {
+    return (
+      <div className="h-12 flex items-center justify-center px-2">
+        <button
+          onClick={() => onToggle(course, member)}
+          className={`w-8 h-8 flex items-center justify-center text-lg font-bold transition-all duration-200 rounded-full cursor-pointer ${
+            isSelected
+              ? "bg-green-500 text-white hover:bg-green-600"
+              : "border-2 border-gray-300 text-gray-300 hover:border-orange-400 hover:text-orange-400 hover:bg-orange-50"
+          }`}
+          title={
+            isSelected
+              ? `Remove ${member.name} from '${course.Name}'`
+              : `Add ${member.name} to '${course.Name}'`
+          }
+          aria-label={
+            isSelected
+              ? `Remove course ${course.Name} from ${member.name}'s training plan`
+              : `Add course ${course.Name} to ${member.name}'s training plan`
+          }
+        >
+          {isSelected ? "●" : "○"}
+        </button>
+      </div>
+    );
+  },
+);
+
+PlanCell.displayName = "PlanCell";

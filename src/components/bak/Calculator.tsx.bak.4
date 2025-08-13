@@ -1,0 +1,205 @@
+import React, { useState } from 'react';
+import { Copy, Edit, DollarSign, X } from 'lucide-react';
+
+interface CalculatorProps {
+  total?: number;
+  onBudgetChange?: (budget: number | null) => void;
+}
+
+const Calculator = ({ total = 0, onBudgetChange }: CalculatorProps) => {
+  const [budget, setBudget] = useState<number | null>(null);
+  const [isEditingBudget, setIsEditingBudget] = useState(false);
+  const [budgetInput, setBudgetInput] = useState('0');
+  const [isCreditsMode, setIsCreditsMode] = useState(false);
+
+  const handleSetBudget = () => {
+    setIsEditingBudget(true);
+    setBudgetInput('0');
+  };
+
+  const handleBudgetSubmit = () => {
+    const value = parseFloat(budgetInput) || 0;
+    setBudget(value);
+    setIsEditingBudget(false);
+    onBudgetChange?.(value);
+  };
+
+  const handleBudgetKeyPress = (e: React.KeyboardEvent) => {
+    if (e.key === 'Enter') {
+      handleBudgetSubmit();
+    }
+    if (e.key === 'Escape') {
+      setIsEditingBudget(false);
+      setBudgetInput(budget?.toString() || '0');
+    }
+  };
+
+  const handleEditBudget = () => {
+    setIsEditingBudget(true);
+    setBudgetInput(budget?.toString() || '0');
+  };
+
+  const handleDeleteBudget = () => {
+    setBudget(null);
+    setIsEditingBudget(false);
+    onBudgetChange?.(null);
+  };
+
+  const handleCopy = (value: string) => {
+    navigator.clipboard.writeText(value);
+  };
+
+  const formatCurrency = (amount: number) => {
+    return new Intl.NumberFormat('en-US', {
+      minimumFractionDigits: 0,
+      maximumFractionDigits: 0,
+    }).format(amount);
+  };
+
+  const displayTotal = isCreditsMode ? total / 10 : total;
+  const displayBudget = budget && isCreditsMode ? budget / 10 : budget;
+  const difference = budget ? budget - total : 0;
+  const displayDifference = isCreditsMode ? difference / 10 : difference;
+
+  const currencySymbol = isCreditsMode ? '' : '$';
+  const currencyUnit = isCreditsMode ? ' TUs' : '';
+
+  return (
+    <div className="flex flex-col gap-2 w-full min-w-0">
+      {/* Budget Row */}
+      <div className="flex items-center gap-2">
+        {!isEditingBudget && budget === null ? (
+          <button
+            onClick={handleSetBudget}
+            className="px-3 py-2 bg-orange-500 text-white rounded-md hover:bg-orange-600 transition-colors font-medium text-sm whitespace-nowrap"
+          >
+            Set Budget
+          </button>
+        ) : (
+          <>
+            <div className="flex-1 min-w-0 relative">
+              {isEditingBudget ? (
+                <input
+                  type="number"
+                  value={budgetInput}
+                  onChange={(e) => setBudgetInput(e.target.value)}
+                  onBlur={handleBudgetSubmit}
+                  onKeyDown={handleBudgetKeyPress}
+                  className="w-full px-2 py-1.5 border-2 border-orange-500 rounded-md focus:outline-none focus:border-orange-600 bg-transparent text-white text-sm font-bold"
+                  placeholder="Enter budget"
+                  autoFocus
+                />
+              ) : (
+                <button
+                  onClick={handleEditBudget}
+                  className="w-full px-2 py-1.5 border-2 border-orange-500 rounded-md font-bold text-left text-white bg-transparent hover:bg-white/10 transition-colors text-sm"
+                >
+                  {currencySymbol}{displayBudget ? formatCurrency(displayBudget) : '0'}{currencyUnit}
+                  <span className="text-xs text-gray-300 ml-1 font-normal">Budget</span>
+                </button>
+              )}
+            </div>
+            
+            {!isEditingBudget && budget !== null && (
+              <>
+                <button
+                  onClick={() => handleCopy(budget.toString())}
+                  className="p-1.5 text-gray-300 hover:text-white transition-colors flex-shrink-0"
+                  title="Copy budget"
+                >
+                  <Copy className="w-3.5 h-3.5" />
+                </button>
+                <button
+                  onClick={handleDeleteBudget}
+                  className="p-1.5 text-gray-300 hover:text-red-400 transition-colors flex-shrink-0"
+                  title="Delete budget"
+                >
+                  <X className="w-3.5 h-3.5" />
+                </button>
+              </>
+            )}
+          </>
+        )}
+      </div>
+
+      {/* Total Row - 10% bigger */}
+      <div className="flex items-center gap-2">
+        <div className="flex-1 min-w-0 relative">
+          <div className="px-3 py-2.5 border-2 border-orange-500 rounded-md font-bold text-white bg-transparent text-base">
+            {currencySymbol}{formatCurrency(displayTotal)}{currencyUnit}
+            <span className="text-sm text-gray-300 ml-1 font-normal">Total</span>
+          </div>
+        </div>
+        
+        <button
+          onClick={() => handleCopy(total.toString())}
+          disabled={total === 0}
+          className={`p-2 transition-colors flex-shrink-0 ${
+            total === 0 
+              ? 'text-gray-500 cursor-not-allowed' 
+              : 'text-gray-300 hover:text-white'
+          }`}
+          title="Copy total"
+        >
+          <Copy className="w-4 h-4" />
+        </button>
+
+        {/* Currency Toggle */}
+        <div className="relative group flex-shrink-0">
+          <button
+            onClick={() => setIsCreditsMode(!isCreditsMode)}
+            className="flex items-center bg-transparent border-2 border-orange-500 rounded-lg overflow-hidden hover:bg-white/10 transition-colors"
+            title={`Switch from ${isCreditsMode ? 'TUs (Training Units / Credits) to $USD' : '$USD to TUs (Training Units / Credits)'}`}
+          >
+            <div className={`px-2 py-2 text-xs font-medium transition-all duration-200 ${
+              !isCreditsMode 
+                ? 'bg-orange-500 text-white rounded-md m-0.5' 
+                : 'text-gray-300'
+            }`}>
+              $USD
+            </div>
+            <div className={`px-2 py-2 text-xs font-medium transition-all duration-200 ${
+              isCreditsMode 
+                ? 'bg-orange-500 text-white rounded-md m-0.5' 
+                : 'text-gray-300'
+            }`}>
+              TUs
+            </div>
+          </button>
+          
+          {/* Tooltip */}
+          <div className="absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 px-2 py-1 bg-gray-800 text-white text-xs rounded opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none whitespace-nowrap z-10">
+            Switch from {isCreditsMode ? 'TUs (Training Units / Credits) to $USD' : '$USD to TUs (Training Units / Credits)'}
+          </div>
+        </div>
+      </div>
+
+      {/* Difference Row (only shown when budget is set) */}
+      {budget !== null && (
+        <div className="flex items-center gap-2">
+          <div className="flex-1 min-w-0 relative">
+            <div className={`px-2 py-1.5 border-2 rounded-md font-bold text-white bg-transparent text-sm ${
+              difference >= 0 ? 'border-green-500' : 'border-red-500'
+            }`}>
+              {difference >= 0 ? '' : '-'}{currencySymbol}{formatCurrency(Math.abs(displayDifference))}{currencyUnit}
+              <span className="text-xs text-gray-300 ml-1 font-normal">Diff</span>
+            </div>
+          </div>
+          
+          <button
+            onClick={() => handleCopy(difference.toString())}
+            className="p-1.5 text-gray-300 hover:text-white transition-colors flex-shrink-0"
+            title="Copy difference"
+          >
+            <Copy className="w-3.5 h-3.5" />
+          </button>
+          
+          {/* Spacer to align with toggle above */}
+          <div className="w-[76px] flex-shrink-0"></div>
+        </div>
+      )}
+    </div>
+  );
+};
+
+export default Calculator;

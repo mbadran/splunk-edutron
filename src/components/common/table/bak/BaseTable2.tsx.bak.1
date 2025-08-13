@@ -1,0 +1,185 @@
+import React from "react";
+import { Table, flexRender } from "@tanstack/react-table";
+
+// Re-export components and utilities for backward compatibility
+export { TableHeader } from "./TableHeader";
+export { DefaultCell } from "./cellrenderers";
+export { createColumn, createRowNumberColumn } from "@/utils/table/columnUtils";
+export type { CellRenderer } from "./cellrenderers";
+export type { BaseColumnConfig } from "@/utils/table/columnUtils";
+
+// Forward ref interface for BaseTable2
+export interface BaseTable2Ref {
+  scrollToTop: () => void;
+}
+
+interface BaseTable2Props<TData> {
+  table: Table<TData>;
+  onScroll?: (scrollTop: number) => void;
+  containerHeight?: number | string;
+  headerClassName?: string;
+  bodyClassName?: string;
+  rowClassName?: string;
+  cellClassName?: string;
+  emptyStateMessage?: string;
+  loadingState?: boolean;
+  footerMessage?: string;
+}
+
+const BaseTable2 = React.forwardRef<BaseTable2Ref, BaseTable2Props<any>>(
+  <TData,>(
+    {
+      table,
+      onScroll,
+      containerHeight = "100%",
+      headerClassName = "",
+      bodyClassName = "",
+      rowClassName = "",
+      cellClassName = "",
+      emptyStateMessage = "No data available",
+      loadingState = false,
+      footerMessage,
+    }: BaseTable2Props<TData>,
+    ref: React.Ref<BaseTable2Ref>,
+  ) => {
+    const scrollRef = React.useRef<HTMLDivElement>(null);
+
+    React.useImperativeHandle(ref, () => ({
+      scrollToTop: () => {
+        if (scrollRef.current) {
+          scrollRef.current.scrollTop = 0;
+        }
+      },
+    }));
+
+    const handleScroll = (e: React.UIEvent<HTMLDivElement>) => {
+      const newScrollTop = e.currentTarget.scrollTop;
+      if (onScroll) {
+        onScroll(newScrollTop);
+      }
+    };
+
+    const rows = table.getRowModel().rows;
+    const headerGroups = table.getHeaderGroups();
+    const totalWidth = table.getTotalSize();
+
+    const renderEmptyState = () => (
+      <div className="flex items-center justify-center h-32">
+        <p className="text-gray-500">{emptyStateMessage}</p>
+      </div>
+    );
+
+    const renderLoadingState = () => (
+      <div className="flex items-center justify-center h-32">
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-gray-600"></div>
+      </div>
+    );
+
+    return (
+      <div className="flex flex-col h-full" style={{ height: containerHeight }}>
+        {/* Header */}
+        <div className={`${headerClassName}`} style={{ minWidth: totalWidth }}>
+          {headerGroups.map((headerGroup) => (
+            <div key={headerGroup.id} className="flex">
+              {headerGroup.headers.map((header) => (
+                <div
+                  key={header.id}
+                  className="relative"
+                  style={{
+                    width: header.getSize(),
+                    minWidth: header.getSize(),
+                  }}
+                >
+                  <div className="h-20 flex items-center px-3 py-2">
+                    {header.isPlaceholder
+                      ? null
+                      : flexRender(
+                          header.column.columnDef.header,
+                          header.getContext(),
+                        )}
+                  </div>
+
+                  {/* Native TanStack Resizer */}
+                  {header.column.getCanResize() && (
+                    <div
+                      className="absolute right-0 top-0 h-full w-1 cursor-col-resize bg-gray-400 opacity-0 hover:opacity-100 transition-opacity"
+                      onMouseDown={header.getResizeHandler()}
+                      onTouchStart={header.getResizeHandler()}
+                      role="separator"
+                      aria-label="Resize column"
+                      tabIndex={0}
+                    />
+                  )}
+                </div>
+              ))}
+            </div>
+          ))}
+        </div>
+
+        {/* Scrollable Body */}
+        <div className="flex-1 overflow-auto">
+          <div
+            ref={scrollRef}
+            className={`${bodyClassName}`}
+            style={{ minWidth: totalWidth }}
+            onScroll={handleScroll}
+            role="grid"
+            aria-label="Data table"
+            aria-rowcount={rows.length}
+            aria-colcount={table.getAllColumns().length}
+          >
+            {loadingState
+              ? renderLoadingState()
+              : rows.length === 0
+                ? renderEmptyState()
+                : rows.map((row, rowIndex) => (
+                    <div
+                      key={row.id}
+                      className={`flex ${rowClassName}`}
+                      role="row"
+                      aria-rowindex={rowIndex + 2}
+                    >
+                      {row.getVisibleCells().map((cell, cellIndex) => (
+                        <div
+                          key={cell.id}
+                          className={`overflow-hidden ${cellClassName}`}
+                          style={{
+                            width: cell.column.getSize(),
+                            minWidth: cell.column.getSize(),
+                          }}
+                          role="gridcell"
+                          aria-colindex={cellIndex + 1}
+                        >
+                          {flexRender(
+                            cell.column.columnDef.cell,
+                            cell.getContext(),
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  ))}
+          </div>
+        </div>
+
+        {/* Optional Footer */}
+        {footerMessage && (
+          <div className="flex-shrink-0 px-4 py-2 bg-gray-100 border-t border-gray-200">
+            <span
+              className="text-gray-700 text-sm"
+              dangerouslySetInnerHTML={{
+                __html: footerMessage.replace(
+                  /\*\*(.*?)\*\*/g,
+                  "<strong>$1</strong>",
+                ),
+              }}
+            />
+          </div>
+        )}
+      </div>
+    );
+  },
+);
+
+BaseTable2.displayName = "BaseTable2";
+
+export default BaseTable2;

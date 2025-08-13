@@ -1,0 +1,234 @@
+// ***********************************************
+// Custom commands for Splunk EDUTRON testing
+// ***********************************************
+
+/**
+ * NAVIGATION & SETUP COMMANDS
+ */
+
+// Wait for the app to be ready
+Cypress.Commands.add("waitForAppReady", () => {
+  cy.get("body").should("not.contain", "Loading...");
+});
+
+// Wait for catalogs to be loaded from CSV files
+Cypress.Commands.add("waitForCatalogsLoaded", () => {
+  cy.get("#monotable", { timeout: 30000 }).should("be.visible");
+});
+
+// Wait for planner to be ready
+Cypress.Commands.add("waitForPlannerReady", () => {
+  cy.title().should("contain", "Planner");
+  cy.get("#planner").should("be.visible");
+  cy.get("#monotable").should("be.visible");
+  cy.get("#calculator").should("be.visible");
+
+  cy.get("body").then(($body) => {
+    if ($body.find("#table-loading-state").length > 0) {
+      cy.get("#table-loading-state").should("not.be.visible");
+    }
+  });
+});
+
+// Navigate to planner and wait for it to be ready
+Cypress.Commands.add("visitPlannerAndWait", () => {
+  cy.visit("/planner");
+  cy.waitForAppReady();
+  cy.get("#planner", { timeout: 15000 }).should("be.visible");
+  cy.get("#calculator", { timeout: 15000 }).should("be.visible");
+  cy.waitForCatalogsLoaded();
+  cy.waitForPlannerReady();
+});
+
+// Navigate to home page and wait for it to be ready
+Cypress.Commands.add("visitHomeAndWait", () => {
+  cy.visit("/");
+  cy.waitForAppReady();
+  cy.get("body").should("be.visible");
+  cy.title().should("contain", "Splunk EDUTRON");
+});
+
+/**
+ * TEAM MEMBER COMMANDS
+ */
+
+// Add team member via UserPlus button
+Cypress.Commands.add("addTeamMember", () => {
+  cy.log("🔍 Adding team member...");
+  cy.get("#plan-actions").should("be.visible");
+  cy.get("#plan-actions").within(() => {
+    cy.get('button[title="Add Team Member"]').should("be.visible");
+    cy.get('button[title="Add Team Member"]').should("not.be.disabled");
+    cy.get('button[title="Add Team Member"]').click();
+  });
+  cy.wait(500);
+  cy.log("⏱️ Team member addition completed");
+});
+
+// Remove team member with confirmation
+Cypress.Commands.add("removeTeamMember", (memberName: string) => {
+  cy.log(`🗑️ Removing team member: ${memberName}`);
+  
+  // Find and click the remove button
+  const removeButtonSelector = `button[aria-label="Remove ${memberName} from the plan"]`;
+  cy.get(removeButtonSelector).should('be.visible').click();
+  
+  // Handle confirmation modal
+  cy.get('#confirmation-modal-confirm').should('be.visible').click();
+  
+  cy.wait(500);
+  cy.log(`⏱️ Removed ${memberName}`);
+});
+
+/**
+ * SELECTION COMMANDS
+ */
+
+// Select course for team member
+Cypress.Commands.add("selectCourseForMember", (rowIndex: number, memberColumnIndex?: number) => {
+  const columnIndex = memberColumnIndex || 10; // Default first team member column
+  
+  cy.get(`#table-row-${rowIndex}`).within(() => {
+    cy.get(`[aria-colindex="${columnIndex}"]`).within(() => {
+      cy.get('[role="button"]').click();
+    });
+  });
+  cy.wait(250);
+});
+
+/**
+ * CALCULATOR COMMANDS
+ */
+
+// Set budget amount
+Cypress.Commands.add("setBudget", (amount: number) => {
+  cy.log(`💰 Setting budget to: ${amount}`);
+  
+  // Break the chain to handle React re-render
+  cy.get("#calculator #budget-set").should("be.visible");
+  cy.get("#calculator #budget-set").click();
+  
+  // Wait for re-render, then interact with new input
+  cy.get("#calculator #budget-input").should("be.visible");
+  cy.get("#calculator #budget-input").clear().type(amount.toString());
+  cy.get("#calculator #budget-input").type("{enter}");
+  
+  cy.wait(750);
+  cy.log(`✅ Budget set to: ${amount}`);
+});
+
+// Verify budget amount (handles formatted numbers like "2,000")
+Cypress.Commands.add("verifyBudget", (expectedBudget: number) => {
+  cy.get("#calculator").within(() => {
+    cy.get("#budget-value").invoke('text').then((budgetText) => {
+      // Remove commas and parse to number for comparison
+      const actualBudget = parseInt(budgetText.replace(/,/g, ''));
+      expect(actualBudget).to.equal(expectedBudget);
+    });
+  });
+});
+
+// Verify budget difference (gap/surplus) - handles formatted numbers
+Cypress.Commands.add("verifyBudgetDifference", (expectedDifference: number) => {
+  cy.get("#calculator").within(() => {
+    cy.get("#difference-value").invoke('text').then((diffText) => {
+      // Remove commas and parse to number for comparison
+      const actualDifference = parseInt(diffText.replace(/,/g, ''));
+      expect(actualDifference).to.equal(expectedDifference);
+    });
+  });
+});
+
+// Toggle between Credits (TUs) and USD mode
+Cypress.Commands.add("toggleCreditsMode", () => {
+  cy.log("🔄 Toggling credits mode...");
+  cy.get("#calculator").within(() => {
+    cy.get("#currency-toggle").should("be.visible").click();
+  });
+  cy.wait(500);
+  cy.log("✅ Credits mode toggled");
+});
+
+// Clear/delete budget
+Cypress.Commands.add("clearBudget", () => {
+  cy.log("🗑️ Clearing budget...");
+  cy.get("#calculator").within(() => {
+    cy.get("#budget-delete").should("be.visible").click();
+  });
+  cy.wait(500);
+  cy.log("✅ Budget cleared");
+});
+
+/**
+ * VERIFICATION COMMANDS
+ */
+
+// Verify team member exists
+Cypress.Commands.add("verifyTeamMemberExists", (memberName: string) => {
+  cy.get('body').then(($body) => {
+    if ($body.find('.team-member-header').length > 0) {
+      cy.get('.team-member-header').should("contain", memberName);
+    } else {
+      cy.get('#monotable').should("contain", memberName);
+    }
+  });
+});
+
+// Verify team member does not exist
+Cypress.Commands.add("verifyTeamMemberNotExists", (memberName: string) => {
+  cy.get('body').then(($body) => {
+    if ($body.find('.team-member-header').length > 0) {
+      cy.get('.team-member-header').should("not.contain", memberName);
+    } else {
+      cy.get('#monotable').should("not.contain", memberName);
+    }
+  });
+});
+
+// Verify calculator total (handles formatted numbers like "1,065")
+Cypress.Commands.add("verifyCalculatorTotal", (expectedTotal: number) => {
+  cy.get("#calculator").within(() => {
+    cy.get("#total-value").invoke('text').then((totalText) => {
+      // Remove commas and parse to number for comparison
+      const actualTotal = parseInt(totalText.replace(/,/g, ''));
+      expect(actualTotal).to.equal(expectedTotal);
+    });
+  });
+});
+
+// Verify budget amount (handles formatted numbers like "2,000")
+Cypress.Commands.add("verifyBudget", (expectedBudget: number) => {
+  cy.get("#calculator").within(() => {
+    cy.get("#budget-value").invoke('text').then((budgetText) => {
+      // Remove commas and parse to number for comparison
+      const actualBudget = parseInt(budgetText.replace(/,/g, ''));
+      expect(actualBudget).to.equal(expectedBudget);
+    });
+  });
+});
+
+// Verify budget difference (gap/surplus) - handles formatted numbers
+Cypress.Commands.add("verifyBudgetDifference", (expectedDifference: number) => {
+  cy.get("#calculator").within(() => {
+    cy.get("#difference-value").invoke('text').then((diffText) => {
+      // Remove commas and parse to number for comparison
+      const actualDifference = parseInt(diffText.replace(/,/g, ''));
+      expect(actualDifference).to.equal(expectedDifference);
+    });
+  });
+});
+
+// Verify selection state
+Cypress.Commands.add("verifySelectionState", (rowIndex: number, shouldBeSelected: boolean, memberColumnIndex?: number) => {
+  const columnIndex = memberColumnIndex || 10;
+  
+  cy.get(`#table-row-${rowIndex}`).within(() => {
+    cy.get(`[aria-colindex="${columnIndex}"]`).within(() => {
+      if (shouldBeSelected) {
+        cy.get(".bg-emerald-400, .plan-cell-selected").should("exist");
+      } else {
+        cy.get(".border-gray-300, .plan-cell-unselected").should("exist");
+      }
+    });
+  });
+});

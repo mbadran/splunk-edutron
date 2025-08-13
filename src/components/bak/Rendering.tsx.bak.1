@@ -1,0 +1,213 @@
+import React, { useRef, useEffect } from 'react';
+
+interface RenderDebuggerProps {
+  componentName: string;
+  props?: Record<string, any>;
+  state?: Record<string, any>;
+  maxRenderWarning?: number;
+  onMaxDepthExceeded?: (componentName: string, renderCount: number) => void;
+}
+
+interface RenderingStats {
+  componentName: string;
+  renderCount: number;
+  lastRenderTime: number;
+  renderHistory: number[];
+  props: Record<string, any>;
+  state: Record<string, any>;
+}
+
+// Global tracking for all components
+const renderingStats = new Map<string, RenderingStats>();
+const RENDER_WARNING_THRESHOLD = 50;
+const RENDER_ERROR_THRESHOLD = 100;
+const RENDER_HISTORY_SIZE = 10;
+
+export const useRenderDebugger = (
+  componentName: string,
+  dependencies: Record<string, any> = {},
+  options: {
+    maxRenderWarning?: number;
+    onMaxDepthExceeded?: (componentName: string, renderCount: number) => void;
+    logLevel?: 'none' | 'basic' | 'detailed';
+  } = {}
+) => {
+  const renderCountRef = useRef(0);
+  const lastPropsRef = useRef<Record<string, any>>({});
+  const {
+    maxRenderWarning = RENDER_WARNING_THRESHOLD,
+    onMaxDepthExceeded,
+    logLevel = 'basic'
+  } = options;
+
+  // Increment render count
+  renderCountRef.current++;
+  const currentRenderCount = renderCountRef.current;
+  const timestamp = Date.now();
+
+  // Update global stats
+  const existingStats = renderingStats.get(componentName);
+  const renderHistory = existingStats?.renderHistory || [];
+  renderHistory.push(timestamp);
+  
+  // Keep only recent renders
+  if (renderHistory.length > RENDER_HISTORY_SIZE) {
+    renderHistory.shift();
+  }
+
+  const stats: RenderingStats = {
+    componentName,
+    renderCount: currentRenderCount,
+    lastRenderTime: timestamp,
+    renderHistory,
+    props: dependencies,
+    state: {}
+  };
+
+  renderingStats.set(componentName, stats);
+
+  // Detect prop changes
+  const changedDependencies: string[] = [];
+  Object.keys(dependencies).forEach(key => {
+    if (lastPropsRef.current[key] !== dependencies[key]) {
+      changedDependencies.push(key);
+    }
+  });
+  lastPropsRef.current = { ...dependencies };
+
+  // Check for excessive renders
+  const isExcessive = currentRenderCount > maxRenderWarning;
+  const isCritical = currentRenderCount > RENDER_ERROR_THRESHOLD;
+  
+  // Calculate render frequency (renders per second in last window)
+  const recentRenders = renderHistory.filter(time => timestamp - time < 1000);
+  const renderFrequency = recentRenders.length;
+
+  // Log based on level and thresholds
+  if (logLevel !== 'none') {
+    if (isCritical) {
+      console.error(`🚨 CRITICAL: ${componentName} has rendered ${currentRenderCount} times! This may indicate infinite re-renders.`, {
+        renderCount: currentRenderCount,
+        renderFrequency: `${renderFrequency}/sec`,
+        changedDependencies,
+        dependencies,
+        timestamp
+      });
+      
+      // Call callback if provided
+      onMaxDepthExceeded?.(componentName, currentRenderCount);
+      
+      // Log stack trace to help identify the cause
+      console.trace(`Stack trace for excessive renders in ${componentName}`);
+      
+    } else if (isExcessive) {
+      console.warn(`⚠️ ${componentName} has rendered ${currentRenderCount} times`, {
+        renderFrequency: `${renderFrequency}/sec`,
+        changedDependencies: changedDependencies.length > 0 ? changedDependencies : 'No dependency changes detected',
+        timestamp
+      });
+    } else if (logLevel === 'detailed') {
+      console.log(`🔧 ${componentName} render #${currentRenderCount}`, {
+        changedDependencies: changedDependencies.length > 0 ? changedDependencies : 'No changes',
+        renderFrequency: renderFrequency > 1 ? `${renderFrequency}/sec` : 'Normal',
+        timestamp
+      });
+    }
+  }
+
+  // Return debugging info
+  return {
+    renderCount: currentRenderCount,
+    isExcessive,
+    isCritical,
+    changedDependencies,
+    renderFrequency,
+    timestamp
+  };
+};
+
+// Utility to get all rendering stats
+export const getAllRenderingStats = (): RenderingStats[] => {
+  return Array.from(renderingStats.values());
+};
+
+// Utility to reset stats for a component
+export const resetRenderingStats = (componentName?: string) => {
+  if (componentName) {
+    renderingStats.delete(componentName);
+  } else {
+    renderingStats.clear();
+  }
+};
+
+// Utility to log summary of all components
+export const logRenderingSummary = () => {
+  const stats = getAllRenderingStats();
+  const problematicComponents = stats.filter(s => s.renderCount > RENDER_WARNING_THRESHOLD);
+  
+  console.group('🔧 Rendering Summary');
+  console.log('Total components tracked:', stats.length);
+  console.log('Problematic components:', problematicComponents.length);
+  
+  if (problematicComponents.length > 0) {
+    console.warn('Components with excessive renders:');
+    problematicComponents.forEach(stat => {
+      console.warn(`- ${stat.componentName}: ${stat.renderCount} renders`);
+    });
+  }
+  
+  console.groupEnd();
+};
+
+// Hook for monitoring component lifecycle
+export const useComponentLifecycle = (componentName: string) => {
+  useEffect(() => {
+    console.log(`🔧 ${componentName} mounted`);
+    return () => {
+      console.log(`🔧 ${componentName} unmounted`);
+      // Optionally reset stats on unmount
+      // resetRenderingStats(componentName);
+    };
+  }, [componentName]);
+};
+
+// React component version for declarative usage
+export const RenderDebugger: React.FC<RenderDebuggerProps> = ({
+  componentName,
+  props = {},
+  state = {},
+  maxRenderWarning = RENDER_WARNING_THRESHOLD,
+  onMaxDepthExceeded
+}) => {
+  const debugInfo = useRenderDebugger(
+    componentName,
+    { ...props, ...state },
+    { maxRenderWarning, onMaxDepthExceeded }
+  );
+
+  // Only render in development
+  if (process.env.NODE_ENV === 'production') {
+    return null;
+  }
+
+  return (
+    <div 
+      style={{ 
+        position: 'fixed', 
+        top: 0, 
+        right: 0, 
+        zIndex: 9999, 
+        background: debugInfo.isCritical ? 'red' : debugInfo.isExcessive ? 'orange' : 'green',
+        color: 'white',
+        padding: '4px 8px',
+        fontSize: '12px',
+        fontFamily: 'monospace'
+      }}
+    >
+      {componentName}: {debugInfo.renderCount} renders
+      {debugInfo.renderFrequency > 1 && ` (${debugInfo.renderFrequency}/sec)`}
+    </div>
+  );
+};
+
+export default RenderDebugger;

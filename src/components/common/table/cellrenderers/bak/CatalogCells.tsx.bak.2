@@ -1,0 +1,175 @@
+import React from "react";
+import { Clock, DollarSign, ExternalLink, FileText } from "lucide-react";
+import { useAtom } from "jotai";
+import { isCreditsUnitModeAtom } from "@/atoms/globalAtoms";
+import {
+  COURSE_URL_TEMPLATE,
+  CATEGORY_COLORS,
+  MODE_COLORS,
+  MODE_TOOLTIPS,
+  DETAILS_URL_TEMPLATE,
+  LANGUAGE_COLORS,
+} from "@/utils/constants";
+
+// Enhanced row number cell with proper styling
+export const RowNumberCell = ({ getValue, row }: any) => (
+  <div 
+    id={`row-number-${row.index}`} 
+    className="h-12 flex items-center justify-center px-2"
+  >
+    <span className="text-sm font-mono text-gray-600 font-semibold">
+      {getValue() as number}
+    </span>
+  </div>
+);
+
+// Enhanced ID cell with improved styling
+export const IDCell = ({ getValue }: any) => (
+  <div className="h-12 flex items-center px-3 justify-start">
+    <code className="text-sm font-mono bg-gray-100 px-2 py-1 rounded-md text-gray-700 font-medium border">
+      {String(getValue())}
+    </code>
+  </div>
+);
+
+// Enhanced category cell with better styling
+export const CategoryCell = ({ getValue }: any) => (
+  <div className="h-12 flex items-center px-3 justify-start">
+    <span
+      className={`px-3 py-1 rounded-full text-sm font-semibold whitespace-nowrap shadow-sm ${
+        CATEGORY_COLORS[String(getValue())] || "bg-gray-500 text-white"
+      }`}
+    >
+      {String(getValue())}
+    </span>
+  </div>
+);
+
+// Enhanced mode cell
+export const ModeCell = ({ getValue }: any) => (
+  <div className="h-12 flex items-center px-3 justify-start">
+    <span
+      className={`px-3 py-1 rounded-full text-sm font-semibold whitespace-nowrap cursor-help shadow-sm ${
+        MODE_COLORS[String(getValue())] || "bg-gray-100 text-gray-800"
+      }`}
+      title={MODE_TOOLTIPS[String(getValue())] || String(getValue())}
+    >
+      {String(getValue())}
+    </span>
+  </div>
+);
+
+// Fixed language cell with proper color handling
+export const LanguageCell = ({ getValue }: any) => {
+  const language = String(getValue()) || "English";
+  
+  // Get color safely
+  const colorClass = LANGUAGE_COLORS[language] || LANGUAGE_COLORS.default;
+  
+  return (
+    <div className="h-12 flex items-center px-3 justify-start">
+      <span 
+        className={`px-3 py-1 rounded-full text-sm font-semibold whitespace-nowrap shadow-sm ${colorClass}`}
+      >
+        {language}
+      </span>
+    </div>
+  );
+};
+
+// Enhanced duration cell
+export const DurationCell = ({ getValue }: any) => (
+  <div className="h-12 flex items-center px-3 justify-start">
+    <div className="bg-amber-100 px-3 py-1 rounded-full inline-flex items-center shadow-sm">
+      <Clock className="w-3 h-3 text-amber-700 mr-1.5" />
+      <span className="text-sm font-semibold text-amber-800">
+        {String(getValue())}h
+      </span>
+    </div>
+  </div>
+);
+
+// Enhanced price cell with TU support
+export const PriceCell = ({ getValue }: any) => {
+  const [isCreditsMode] = useAtom(isCreditsUnitModeAtom);
+  const price = Number(getValue());
+  
+  return (
+    <div className="h-12 flex items-center px-3 justify-start">
+      {price === 0 ? (
+        <span className="text-sm font-semibold text-green-700 bg-green-100 px-3 py-1 rounded-full shadow-sm">
+          Free
+        </span>
+      ) : (
+        <div className="flex items-center text-gray-700 bg-pink-100 px-3 py-1 rounded-full shadow-sm">
+          <DollarSign className="w-3 h-3 mr-1 text-pink-700" />
+          <span className="font-semibold text-sm text-pink-800">
+            {isCreditsMode 
+              ? `${(price / 10).toLocaleString("en-US")} TU`
+              : `$${price.toLocaleString("en-US")}`
+            }
+          </span>
+        </div>
+      )}
+    </div>
+  );
+};
+
+// Enhanced name cell with larger text and better link styling
+export const NameCell = ({ getValue, row }: any) => {
+  const course = row.original;
+  const courseName = String(getValue());
+  
+  return (
+    <div className="h-12 flex items-center px-3 justify-start" style={{ minWidth: 0 }}>
+      <div className="w-full min-w-0 overflow-hidden">
+        {course.STEP_ID ? (
+          <a
+            href={COURSE_URL_TEMPLATE.replace("<STEP_ID>", course.STEP_ID)}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-orange-600 hover:text-orange-800 font-semibold flex items-center gap-2 group min-w-0 w-full overflow-hidden text-base transition-colors"
+            title={courseName}
+          >
+            <span className="truncate min-w-0 flex-1 overflow-hidden text-ellipsis whitespace-nowrap">
+              {courseName}
+            </span>
+            <ExternalLink className="w-4 h-4 opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0" />
+          </a>
+        ) : (
+          <span
+            className="font-semibold text-gray-900 truncate block min-w-0 w-full overflow-hidden text-ellipsis whitespace-nowrap text-base"
+            title={courseName}
+          >
+            {courseName}
+          </span>
+        )}
+      </div>
+    </div>
+  );
+};
+
+// Enhanced PDF cell
+export const PDFCell = ({ getValue, row }: any) => {
+  const course = row.original;
+  
+  return (
+    <div className="h-12 flex items-center px-3 justify-center">
+      {course.Alias ? (
+        <a
+          href={DETAILS_URL_TEMPLATE.replace("<COURSE_ALIAS>", course.Alias)}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="text-red-600 hover:text-red-800 transition-colors p-2 rounded-md hover:bg-red-50"
+          title={`View PDF for ${course.Name || "course"}`}
+        >
+          <FileText className="w-4 h-4" />
+        </a>
+      ) : (
+        <span className="text-gray-400 p-2" title="PDF not available">
+          <FileText className="w-4 h-4" />
+        </span>
+      )}
+    </div>
+  );
+};

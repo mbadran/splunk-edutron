@@ -1,0 +1,686 @@
+import React, { useMemo } from "react";
+import { Plus, Edit, Check, X, Trash2, FileText, ExternalLink } from "lucide-react";
+import {
+  useReactTable,
+  getCoreRowModel,
+  getSortedRowModel,
+  createColumnHelper,
+  ColumnDef,
+} from "@tanstack/react-table";
+import { useAtom } from "jotai";
+import BaseTable, { SortableHeader, createRowNumberColumn, createDataColumn } from "./common/BaseTable";
+import { Course, Person } from "@/types/types";
+import { DEFAULT_TEAM_NAMES, DEFAULT_TABLE, CATEGORY_COLORS, MODE_COLORS, MODE_TOOLTIPS, COURSE_URL_TEMPLATE, DETAILS_URL_TEMPLATE } from "@/utils/constants";
+import {
+  plannerCoursesAtom,
+  planStateAtom,
+  editingTeamMemberAtom,
+  editingTeamMemberValueAtom,
+  addTeamMemberAtom,
+  updateTeamMemberAtom,
+  deleteTeamMemberAtom,
+  toggleSelectionAtom,
+  createPlanSelectionKey,
+  setStatusAtom,
+} from "@/atoms/globalAtoms";
+import { useCatalogs } from "@/utils/useCatalogs";
+
+const MAX_TEAM_MEMBERS = 20;
+const MEMBER_COLUMN_WIDTH = DEFAULT_TABLE.COLUMN_WIDTH.MEDIUM;
+
+// Utility function to interpolate between two hex colors
+const interpolateColor = (startColor: string, endColor: string, factor: number): string => {
+  const start = {
+    r: parseInt(startColor.slice(1, 3), 16),
+    g: parseInt(startColor.slice(3, 5), 16),
+    b: parseInt(startColor.slice(5, 7), 16)
+  };
+  
+  const end = {
+    r: parseInt(endColor.slice(1, 3), 16),
+    g: parseInt(endColor.slice(3, 5), 16),
+    b: parseInt(endColor.slice(5, 7), 16)
+  };
+  
+  const r = Math.round(start.r + (end.r - start.r) * factor);
+  const g = Math.round(start.g + (end.g - start.g) * factor);
+  const b = Math.round(start.b + (end.b - start.b) * factor);
+  
+  return `#${r.toString(16).padStart(2, '0')}${g.toString(16).padStart(2, '0')}${b.toString(16).padStart(2, '0')}`;
+};
+
+const MonoTable: React.FC = () => {
+  // Use useCatalogs hook to ensure data is loaded
+  const { catalogs, loading, error } = useCatalogs();
+  const [courses] = useAtom(plannerCoursesAtom);
+  const [planState] = useAtom(planStateAtom);
+  const [editingMember, setEditingMember] = useAtom(editingTeamMemberAtom);
+  const [editValue, setEditValue] = useAtom(editingTeamMemberValueAtom);
+  const [, addTeamMember] = useAtom(addTeamMemberAtom);
+  const [, updateTeamMember] = useAtom(updateTeamMemberAtom);
+  const [, deleteTeamMember] = useAtom(deleteTeamMemberAtom);
+  const [, toggleSelection] = useAtom(toggleSelectionAtom);
+  const [, setStatus] = useAtom(setStatusAtom);
+
+  // Debug logging to track data flow
+  React.useEffect(() => {
+    console.log("MonoTable - catalogs loaded:", catalogs.length);
+    console.log("MonoTable - courses from atom:", courses?.length || 0);
+    console.log("MonoTable - plan state catalogs:", planState.catalogs);
+    console.log("MonoTable - team members:", planState.teamMembers?.length || 0);
+    
+    if (courses?.length > 0) {
+      console.log("MonoTable - sample course:", courses[0]);
+    }
+  }, [catalogs, courses, planState]);
+
+  // Initialize team members if empty
+  React.useEffect(() => {
+    if (planState.teamMembers.length === 0) {
+      const defaultMember: Person = {
+        id: `member-initial`, // Use stable ID for hydration
+        name: DEFAULT_TEAM_NAMES[0] || "Team Member 1",
+        email: "",
+        role: "",
+      };
+      addTeamMember(defaultMember);
+    }
+  }, [planState.teamMembers.length, addTeamMember]);
+
+  // Team member management functions
+  const handleAddTeamMember = () => {
+    if (planState.teamMembers.length >= MAX_TEAM_MEMBERS) {
+      setStatus({ isWorking: false, message: `Maximum ${MAX_TEAM_MEMBERS} members allowed` });
+      return;
+    }
+
+    setStatus({ isWorking: true, message: "Adding team member..." });
+    
+    const newMemberName =
+      DEFAULT_TEAM_NAMES[planState.teamMembers.length] ||
+      `Team Member ${planState.teamMembers.length + 1}`;
+
+    const newMember: Person = {
+      id: `member-${planState.teamMembers.length}`, // Use stable ID based on index
+      name: newMemberName,
+      email: "",
+      role: "",
+    };
+
+    addTeamMember(newMember);
+  };
+
+  const handleDeleteTeamMember = (index: number) => {
+    if (planState.teamMembers.length <= 1) {
+      setStatus({ isWorking: false, message: "Cannot delete the last team member" });
+      return;
+    }
+
+    setStatus({ isWorking: true, message: "Removing team member..." });
+    deleteTeamMember(index);
+  };
+
+  const handleUpdateTeamMember = (index: number, newName: string) => {
+    const trimmedName = newName.trim();
+    if (!trimmedName) {
+      setStatus({ isWorking: false, message: "Team member name cannot be empty" });
+      return;
+    }
+
+    if (
+      planState.teamMembers.some(
+        (member, i) =>
+          i !== index &&
+          member.name.toLowerCase() === trimmedName.toLowerCase(),
+      )
+    ) {
+      setStatus({ isWorking: false, message: "Team member name already exists" });
+      return;
+    }
+
+    setStatus({ isWorking: true, message: "Updating team member..." });
+    updateTeamMember({ 
+      index, 
+      updates: { name: trimmedName }
+    });
+  };
+
+  // Editing functions
+  const startEditing = (index: number) => {
+    setEditingMember(index);
+    setEditValue(planState.teamMembers[index]?.name || "");
+  };
+
+  const saveEdit = () => {
+    if (editValue.trim() && editingMember !== null) {
+      handleUpdateTeamMember(editingMember, editValue.trim());
+    } else {
+      setEditingMember(null);
+      setEditValue("");
+    }
+  };
+
+  const cancelEdit = () => {
+    setEditingMember(null);
+    setEditValue("");
+  };
+
+  // Selection functions
+  const isSelected = (course: Course, member: Person) => {
+    const key = createPlanSelectionKey(member.name, course.ID);
+    return planState.selections[key] || false;
+  };
+
+  const handleToggleSelection = (course: Course, member: Person) => {
+    toggleSelection({ course, member });
+  };
+
+  // Helper functions for course data
+  const generateCourseUrl = (course: Course) => {
+    if (course.STEP_ID) {
+      return COURSE_URL_TEMPLATE.replace('<STEP_ID>', course.STEP_ID);
+    }
+    return '#';
+  };
+
+  const generateDetailsUrl = (course: Course) => {
+    if (course.Alias) {
+      return DETAILS_URL_TEMPLATE.replace('<COURSE_ALIAS>', course.Alias.toLowerCase());
+    }
+    return '#';
+  };
+
+  // Selection Cell Component
+  const SelectionCell = React.memo(
+    ({ course, member }: { course: Course; member: Person }) => {
+      const selected = isSelected(course, member);
+
+      return (
+        <div className="h-12 flex items-center justify-center px-2">
+          {selected ? (
+            <button
+              onClick={() => handleToggleSelection(course, member)}
+              className="w-full h-8 flex items-center justify-center text-lg font-bold transition-all duration-200 rounded cursor-pointer bg-emerald-500 text-white hover:bg-emerald-600"
+              title={`Remove '${course.Name}' for ${member.name}`}
+              aria-label={`Remove course ${course.Name} from ${member.name}'s training plan`}
+            >
+              ●
+            </button>
+          ) : (
+            <button
+              onClick={() => handleToggleSelection(course, member)}
+              className="w-full h-8 flex items-center justify-center transition-all duration-200 rounded cursor-pointer hover:bg-orange-100"
+              title={`Add '${course.Name}' for ${member.name}`}
+              aria-label={`Add course ${course.Name} to ${member.name}'s training plan`}
+            >
+              <span className="text-gray-300 text-lg">○</span>
+            </button>
+          )}
+        </div>
+      );
+    }
+  );
+
+  SelectionCell.displayName = "SelectionCell";
+
+  // Team Member Header Component
+  const TeamMemberHeader = React.memo(
+    ({
+      member,
+      index,
+      totalMembers,
+    }: {
+      member: Person;
+      index: number;
+      totalMembers: number;
+    }) => {
+      const isEditing = editingMember === index;
+
+      // Calculate gradient color for this team member
+      const gradientFactor = totalMembers > 1 ? index / (totalMembers - 1) : 0;
+      const headerColor = interpolateColor("#000000", "#dddddd", gradientFactor);
+
+      if (isEditing) {
+        return (
+          <div className="flex items-center justify-center gap-1 w-full h-full px-1">
+            <input
+              id={`team-member-edit-${index}`}
+              type="text"
+              value={editValue}
+              onChange={(e) => setEditValue(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") saveEdit();
+                if (e.key === "Escape") cancelEdit();
+              }}
+              className="flex-1 h-6 px-1 text-xs text-white bg-transparent rounded border-none outline-none text-center border-b-2 border-dashed border-white/60"
+              autoFocus
+              maxLength={30}
+              onFocus={(e) => e.target.select()}
+              aria-label={`Edit team member name: ${member.name}`}
+            />
+            <div className="flex gap-1">
+              <button
+                onClick={saveEdit}
+                className="text-green-300 hover:text-green-100 p-0.5 rounded"
+                title="Save"
+                aria-label="Save team member name changes"
+              >
+                <Check className="w-3 h-3" />
+              </button>
+              <button
+                onClick={cancelEdit}
+                className="text-red-300 hover:text-red-100 p-0.5 rounded"
+                title="Cancel"
+                aria-label="Cancel editing team member name"
+              >
+                <X className="w-3 h-3" />
+              </button>
+            </div>
+          </div>
+        );
+      }
+
+      return (
+        <div className="flex items-center justify-between w-full h-full px-1">
+          <div
+            className="flex-1 text-center cursor-pointer select-none hover:bg-black/20 rounded px-1 py-0.5 transition-colors min-w-0"
+            onClick={() => startEditing(index)}
+            title={`Edit ${member.name}`}
+            role="button"
+            tabIndex={0}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" || e.key === " ") {
+                e.preventDefault();
+                startEditing(index);
+              }
+            }}
+            aria-label={`Team member: ${member.name}. Click to edit.`}
+          >
+            <span 
+              className="text-sm font-semibold block truncate"
+              style={{ color: gradientFactor > 0.5 ? '#000000' : '#ffffff' }} // Switch text color for readability
+            >
+              {member.name}
+            </span>
+          </div>
+
+          <div className="flex gap-0.5 opacity-60 hover:opacity-100 transition-opacity ml-1">
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                startEditing(index);
+              }}
+              className="p-0.5 hover:bg-black/20 rounded transition-colors"
+              title="Edit name"
+              aria-label={`Edit ${member.name}'s name`}
+              style={{ color: gradientFactor > 0.5 ? '#000000' : '#ffffff' }}
+            >
+              <Edit className="w-3 h-3" />
+            </button>
+
+            {totalMembers > 1 && (
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  handleDeleteTeamMember(index);
+                }}
+                className="p-0.5 hover:bg-black/20 hover:text-red-400 rounded transition-colors"
+                title="Delete member"
+                aria-label={`Delete ${member.name} from team`}
+                style={{ color: gradientFactor > 0.5 ? '#000000' : '#ffffff' }}
+              >
+                <Trash2 className="w-3 h-3" />
+              </button>
+            )}
+          </div>
+        </div>
+      );
+    }
+  );
+
+  TeamMemberHeader.displayName = "TeamMemberHeader";
+
+  // Column helper for creating columns
+  const columnHelper = createColumnHelper<Course>();
+
+  // Course data columns (these will be pinned to the left)
+  const courseColumns: ColumnDef<Course>[] = useMemo(() => [
+    // Row number column
+    createRowNumberColumn(),
+
+    // Course ID column
+    createDataColumn("ID", {
+      header: "ID",
+      size: DEFAULT_TABLE.COLUMN_WIDTH.SMALL,
+      cell: ({ getValue, row }) => (
+        <div className="h-12 flex items-center px-2 justify-center">
+          <span 
+            className="text-sm text-gray-700 font-mono truncate"
+            title={getValue() as string}
+          >
+            {getValue() as string}
+          </span>
+        </div>
+      ),
+    }),
+
+    // Course Name column
+    createDataColumn("Name", {
+      header: "Course",
+      size: DEFAULT_TABLE.COLUMN_WIDTH.XXLARGE,
+      cell: ({ getValue, row }) => {
+        const course = row.original;
+        const courseUrl = generateCourseUrl(course);
+        
+        return (
+          <div className="h-12 flex items-center px-2">
+            {courseUrl !== '#' ? (
+              <a
+                href={courseUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-sm text-orange-600 hover:text-orange-700 font-medium truncate flex items-center gap-1"
+                title={`Open ${getValue() as string} in new tab`}
+              >
+                <span className="truncate">{getValue() as string}</span>
+                <ExternalLink className="w-3 h-3 flex-shrink-0" />
+              </a>
+            ) : (
+              <span 
+                className="text-sm text-orange-600 font-medium truncate"
+                title={getValue() as string}
+              >
+                {getValue() as string}
+              </span>
+            )}
+          </div>
+        );
+      },
+    }),
+
+    // Category column
+    createDataColumn("Category", {
+      header: "Category",
+      size: DEFAULT_TABLE.COLUMN_WIDTH.MEDIUM,
+      cell: ({ getValue }) => {
+        const category = getValue() as string;
+        const colorClass = CATEGORY_COLORS[category] || "bg-gray-500 text-white";
+        
+        return (
+          <div className="h-12 flex items-center px-2 justify-center">
+            <span 
+              className={`px-2 py-1 rounded text-xs font-semibold ${colorClass}`}
+              title={category}
+            >
+              {category}
+            </span>
+          </div>
+        );
+      },
+    }),
+
+    // Price column
+    createDataColumn("Price", {
+      header: "Price",
+      size: DEFAULT_TABLE.COLUMN_WIDTH.SMALL,
+      cell: ({ getValue }) => {
+        const price = getValue() as number;
+        return (
+          <div className="h-12 flex items-center px-2 justify-center">
+            <span className={`text-sm font-semibold ${price === 0 ? 'text-green-600' : 'text-gray-700'}`}>
+              {price === 0 ? 'Free' : `$${price}`}
+            </span>
+          </div>
+        );
+      },
+    }),
+
+    // PDF column
+    createDataColumn("PDF", {
+      header: "PDF",
+      size: DEFAULT_TABLE.COLUMN_WIDTH.XSMALL,
+      cell: ({ getValue, row }) => {
+        const course = row.original;
+        const detailsUrl = generateDetailsUrl(course);
+        
+        return (
+          <div className="h-12 flex items-center px-2 justify-center">
+            {detailsUrl !== '#' ? (
+              <a
+                href={detailsUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-orange-600 hover:text-orange-700 transition-colors"
+                title="View course details PDF"
+                aria-label={`View ${course.Name} details PDF`}
+              >
+                <FileText className="w-4 h-4" />
+              </a>
+            ) : (
+              <span className="text-gray-300">
+                <FileText className="w-4 h-4" />
+              </span>
+            )}
+          </div>
+        );
+      },
+    }),
+
+    // Mode column
+    createDataColumn("Mode", {
+      header: "Mode",
+      size: DEFAULT_TABLE.COLUMN_WIDTH.SMALL,
+      cell: ({ getValue }) => {
+        const mode = getValue() as string;
+        const colorClass = MODE_COLORS[mode] || "bg-gray-100 text-gray-800";
+        const tooltip = MODE_TOOLTIPS[mode] || mode;
+        
+        return (
+          <div className="h-12 flex items-center px-2 justify-center">
+            <span 
+              className={`px-2 py-1 rounded text-xs font-semibold ${colorClass}`}
+              title={tooltip}
+            >
+              {mode}
+            </span>
+          </div>
+        );
+      },
+    }),
+
+    // Language column
+    createDataColumn("Language", {
+      header: "Language",
+      size: DEFAULT_TABLE.COLUMN_WIDTH.SMALL,
+      cell: ({ getValue }) => (
+        <div className="h-12 flex items-center px-2 justify-center">
+          <span className="text-sm text-gray-700 font-medium">
+            {getValue() as string || 'EN'}
+          </span>
+        </div>
+      ),
+    }),
+
+    // Duration column
+    createDataColumn("Duration", {
+      header: "Duration",
+      size: DEFAULT_TABLE.COLUMN_WIDTH.SMALL,
+      cell: ({ getValue }) => (
+        <div className="h-12 flex items-center px-2 justify-center">
+          <span className="text-sm text-gray-700 font-mono">
+            {getValue() as number}h
+          </span>
+        </div>
+      ),
+    }),
+  ], []);
+
+  // Team member columns (these will be scrollable)
+  const teamColumns: ColumnDef<Course>[] = useMemo(() => {
+    const memberColumns = planState.teamMembers.map((member, memberIndex) => {
+      // Calculate gradient color for header
+      const gradientFactor = planState.teamMembers.length > 1 ? memberIndex / (planState.teamMembers.length - 1) : 0;
+      const headerColor = interpolateColor("#000000", "#dddddd", gradientFactor);
+
+      return {
+        id: `member-${member.id}`,
+        header: ({ column }: any) => (
+          <SortableHeader column={column} showDragHandle={false}>
+            <TeamMemberHeader
+              member={member}
+              index={memberIndex}
+              totalMembers={planState.teamMembers.length}
+            />
+          </SortableHeader>
+        ),
+        cell: ({ row }: any) => (
+          <SelectionCell course={row.original} member={member} />
+        ),
+        size: MEMBER_COLUMN_WIDTH,
+        minSize: DEFAULT_TABLE.COLUMN_LIMITS.MIN_MEDIUM,
+        maxSize: DEFAULT_TABLE.COLUMN_LIMITS.MAX_MEDIUM,
+        enableResizing: true,
+        enableSorting: false,
+      };
+    });
+
+    // Add member button column with gradient color
+    const addButtonColor = planState.teamMembers.length > 0 
+      ? interpolateColor("#000000", "#dddddd", 1.0) // Lightest color
+      : "#dddddd";
+
+    const addButtonColumn = {
+      id: "add-member",
+      header: ({ column }: any) => (
+        <SortableHeader column={column} showDragHandle={false}>
+          <div 
+            className="w-full h-full flex items-center justify-center"
+            style={{ backgroundColor: addButtonColor }}
+          >
+            <button
+              onClick={handleAddTeamMember}
+              disabled={planState.teamMembers.length >= MAX_TEAM_MEMBERS}
+              className={`w-8 h-8 bg-transparent border-none transition-colors rounded flex items-center justify-center font-semibold ${
+                planState.teamMembers.length < MAX_TEAM_MEMBERS
+                  ? "hover:bg-black/20 cursor-pointer text-black"
+                  : "opacity-50 cursor-not-allowed text-gray-500"
+              }`}
+              title={
+                planState.teamMembers.length < MAX_TEAM_MEMBERS
+                  ? "Add team member"
+                  : `Maximum ${MAX_TEAM_MEMBERS} members allowed`
+              }
+              aria-label={
+                planState.teamMembers.length < MAX_TEAM_MEMBERS
+                  ? "Add new team member to training plan"
+                  : `Maximum ${MAX_TEAM_MEMBERS} team members allowed`
+              }
+            >
+              <Plus className="w-5 h-5" />
+            </button>
+          </div>
+        </SortableHeader>
+      ),
+      cell: () => <div className="h-12"></div>,
+      size: MEMBER_COLUMN_WIDTH,
+      minSize: DEFAULT_TABLE.COLUMN_LIMITS.MIN_MEDIUM,
+      maxSize: DEFAULT_TABLE.COLUMN_LIMITS.MAX_MEDIUM,
+      enableResizing: true,
+      enableSorting: false,
+    };
+
+    return [...memberColumns, addButtonColumn];
+  }, [planState.teamMembers, editingMember, editValue]);
+
+  // Combine all columns
+  const allColumns = useMemo(() => [...courseColumns, ...teamColumns], [courseColumns, teamColumns]);
+
+  // Create table with column pinning
+  const table = useReactTable({
+    data: courses || [],
+    columns: allColumns,
+    getCoreRowModel: getCoreRowModel(),
+    getSortedRowModel: getSortedRowModel(),
+    enableColumnResizing: true,
+    enableColumnPinning: true,
+    enableSorting: true,
+    columnResizeMode: "onChange",
+    initialState: {
+      columnPinning: {
+        left: ['#', 'ID', 'Name', 'Category', 'Price', 'PDF', 'Mode', 'Language', 'Duration'], // Pin all course columns to left
+      },
+      sorting: [], // Default sorting can be set here
+    },
+    meta: {
+      updateData: (rowIndex: number, columnId: string, value: unknown) => {
+        // Handle any inline editing if needed in the future
+        console.log("Update data:", { rowIndex, columnId, value });
+      },
+    },
+  });
+
+  // Handle sorting status indicator
+  React.useEffect(() => {
+    const sortingState = table.getState().sorting;
+    if (sortingState.length > 0) {
+      setStatus({ isWorking: true, message: "Sorting courses..." });
+      
+      // Clear status after sorting completes
+      const timer = setTimeout(() => {
+        setStatus({ isWorking: false, message: "" });
+      }, 300);
+      
+      return () => clearTimeout(timer);
+    }
+  }, [table.getState().sorting, setStatus]);
+
+  // Show loading state while catalogs are loading
+  if (loading) {
+    return (
+      <div id="mono-table-loading" className="h-full w-full flex items-center justify-center">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-orange-500 mx-auto mb-4"></div>
+          <p className="text-gray-600">Loading training courses...</p>
+        </div>
+      </div>
+    );
+  }
+
+  // Show error state if catalog loading failed
+  if (error) {
+    return (
+      <div id="mono-table-error" className="h-full w-full flex items-center justify-center">
+        <div className="text-center max-w-md mx-auto p-6">
+          <div className="text-red-600 mb-4">
+            <svg className="w-12 h-12 mx-auto" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+            </svg>
+          </div>
+          <h3 className="text-lg font-semibold text-gray-900 mb-2">Failed to Load Courses</h3>
+          <p className="text-gray-600 mb-4">{error}</p>
+          <p className="text-sm text-gray-500">Please refresh the page to try again.</p>
+        </div>
+      </div>
+    );
+  }
+
+  // Empty state message
+  const emptyStateMessage = !courses || courses.length === 0
+    ? "No courses available. Please check that catalogs are loaded."
+    : "No courses available for team assignment";
+
+  return (
+    <div id="mono-table" className="h-full w-full">
+      <BaseTable
+        table={table}
+        headerClassName="bg-slate-300 text-slate-800"
+        rowHeight={DEFAULT_TABLE.ROW_HEIGHT}
+        emptyStateMessage={emptyStateMessage}
+        loadingState={loading}
+        containerClassName="h-full"
+      />
+    </div>
+  );
+};
+
+export default MonoTable;

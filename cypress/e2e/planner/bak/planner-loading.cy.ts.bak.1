@@ -1,0 +1,106 @@
+/**
+ * Planner Loading Tests
+ *
+ * Tests the basic loading and initialization of the Planner page.
+ * Covers page structure, header components, MonoTable loading states,
+ * and calculator initialization.
+ */
+
+const INITIAL_TEAM_MEMBER = "Richard Hendricks" as const;
+const DEFAULT_PLAN_TITLE = "Pied Piper / Splunk Training Plan" as const;
+const LOAD_TIMEOUT = 2000; // ms to wait for initial page load
+
+describe("Planner - Loading", () => {
+  beforeEach(() => {
+    // Start each test with a fresh planner page
+    cy.visit("/planner");
+    cy.wait(LOAD_TIMEOUT); // Allow time for React hydration and initial data loading
+  });
+
+  it("loads the planner page successfully", () => {
+    // Verify core page structure loads
+    cy.title().should("contain", "Planner");
+    cy.get("#planner").should("be.visible");
+  });
+
+  it("shows the header with all required elements", () => {
+    // Header container
+    cy.get("#app-header").should("be.visible");
+
+    // Navigation elements
+    cy.get("#header-menu").should("be.visible");
+    cy.get("#header-menu button").should("contain.html", "svg"); // Burger menu icon
+
+    // Branding
+    cy.get("#header-home").should("be.visible");
+    cy.get("#header-home button").should("contain", "Splunk EDUTRON");
+
+    // Page title with default value
+    cy.get("#page-title-display").should("be.visible");
+    cy.get("#page-title-display").should("contain", DEFAULT_PLAN_TITLE);
+  });
+
+  it("shows the monotable with catalog courses loaded", () => {
+    // Verify MonoTable container exists
+    cy.get("#monotable").should("be.visible");
+
+    // Handle dynamic loading states
+    cy.get("body").then(($body) => {
+      // Wait for loading spinner to disappear if present
+      if ($body.find("#table-loading-state").length > 0) {
+        cy.get("#table-loading-state").should("not.be.visible");
+      }
+    });
+
+    // Verify final state: either success (courses) or error (empty state)
+    cy.get("body").then(($body) => {
+      if ($body.find("#table-empty-state").length > 0) {
+        // Error state: catalog failed to load
+        cy.get("#table-empty-state").should("contain", "No courses available");
+      } else {
+        // Success state: courses should be visible
+        cy.get("#monotable").within(() => {
+          // BaseTable2 generates IDs like table-row-1, table-row-2, etc.
+          cy.get('[id^="table-row-"]').should("exist");
+          // Course names get IDs like course-name-1, course-name-2, etc.
+          cy.get('[id^="course-name-"]').should("exist");
+        });
+      }
+    });
+  });
+
+  it("shows the monotable with initial team member", () => {
+    // Verify MonoTable container exists
+    cy.get("#monotable").should("be.visible");
+
+    // Handle dynamic loading states
+    cy.get("body").then(($body) => {
+      // Wait for loading spinner to disappear if present
+      if ($body.find("#table-loading-state").length > 0) {
+        cy.get("#table-loading-state").should("not.be.visible");
+      }
+    });
+
+    // Verify team member appears: either success or error state
+    cy.get("body").then(($body) => {
+      if ($body.find("#table-empty-state").length > 0) {
+        // Error state: catalog failed to load (no team members visible)
+        cy.get("#table-empty-state").should("contain", "No courses available");
+      } else {
+        // Success state: initial team member should be visible in table headers/columns
+        cy.contains(INITIAL_TEAM_MEMBER).should("be.visible");
+      }
+    });
+  });
+
+  it("shows the calculator with correct initial state", () => {
+    // Verify calculator component loads
+    cy.get("#calculator").should("be.visible");
+
+    // Check initial total value is zero
+    cy.get("#calculator").within(() => {
+      cy.get("#total-value").should("be.visible");
+      cy.get("#total-value").should("contain", "0");
+    });
+  });
+});

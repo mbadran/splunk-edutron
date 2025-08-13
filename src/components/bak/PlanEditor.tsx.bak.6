@@ -1,0 +1,472 @@
+import React, {
+  useState,
+  useEffect,
+  useCallback,
+  useMemo,
+  useRef,
+  useReducer,
+} from "react";
+import Header from "./Header";
+import Catalog from "./Catalog";
+import Team from "./Team";
+import Footer from "./Footer";
+import {
+  ConfirmationModal,
+  useConfirmationModal,
+} from "./common/ConfirmationModal";
+import { useScrollSync } from "./hooks/scrollSync";
+import { Course, PlanState } from "./types";
+import {
+  DEFAULT_PLAN_TITLE,
+  PAGE_TITLE_EDIT,
+  DEFAULT_TEAM_NAMES,
+} from "./constants";
+
+// Constants
+const RESIZE_BOUNDS = { min: 30, max: 70 };
+const DEFAULT_LEFT_WIDTH = 50;
+
+// Simplified history management with useReducer
+interface HistoryState {
+  past: PlanState[];
+  present: PlanState;
+  future: PlanState[];
+}
+
+type HistoryAction =
+  | { type: "UPDATE"; payload: PlanState }
+  | { type: "UNDO" }
+  | { type: "REDO" }
+  | { type: "RESET"; payload: PlanState };
+
+const historyReducer = (
+  state: HistoryState,
+  action: HistoryAction,
+): HistoryState => {
+  switch (action.type) {
+    case "UPDATE": {
+      const { payload } = action;
+      // Don't add to history if state hasn't changed
+      if (JSON.stringify(state.present) === JSON.stringify(payload)) {
+        return state;
+      }
+
+      return {
+        past: [...state.past, state.present].slice(-50), // Keep max 50 items
+        present: payload,
+        future: [],
+      };
+    }
+
+    case "UNDO": {
+      if (state.past.length === 0) return state;
+
+      const previous = state.past[state.past.length - 1];
+      const newPast = state.past.slice(0, state.past.length - 1);
+
+      return {
+        past: newPast,
+        present: previous,
+        future: [state.present, ...state.future],
+      };
+    }
+
+    case "REDO": {
+      if (state.future.length === 0) return state;
+
+      const next = state.future[0];
+      const newFuture = state.future.slice(1);
+
+      return {
+        past: [...state.past, state.present],
+        present: next,
+        future: newFuture,
+      };
+    }
+
+    case "RESET": {
+      return {
+        past: [],
+        present: action.payload,
+        future: [],
+      };
+    }
+
+    default:
+      return state;
+  }
+};
+
+interface PlanScrollerProps {
+  courseCount: number;
+  courses: Course[];
+  teamMembers: string[];
+  selections: Record<string, boolean>;
+  onCoursesLoad: (count: number, courses: Course[]) => void;
+  onTeamMembersChange: (members: string[]) => void;
+  onSelectionsChange: (selections: Record<string, boolean>) => void;
+}
+
+// Remove React.memo to ensure proper re-renders
+const PlanScroller: React.FC<PlanScrollerProps> = ({
+  courseCount,
+  courses,
+  teamMembers,
+  selections,
+  onCoursesLoad,
+  onTeamMembersChange,
+  onSelectionsChange,
+}) => {
+  const [isResizing, setIsResizing] = useState(false);
+  const [leftWidth, setLeftWidth] = useState(DEFAULT_LEFT_WIDTH);
+  const containerRef = useRef<HTMLDivElement>(null);
+
+  const {
+    catalogTableRef,
+    teamTableRef,
+    handleCatalogScroll,
+    handleTeamScroll,
+  } = useScrollSync();
+
+  // Improved resize handling
+  const handleMouseMove = useCallback(
+    (e: MouseEvent) => {
+      if (!isResizing || !containerRef.current) return;
+
+      const containerRect = containerRef.current.getBoundingClientRect();
+      const newLeftWidth =
+        ((e.clientX - containerRect.left) / containerRect.width) * 100;
+
+      if (
+        newLeftWidth >= RESIZE_BOUNDS.min &&
+        newLeftWidth <= RESIZE_BOUNDS.max
+      ) {
+        setLeftWidth(newLeftWidth);
+      }
+    },
+    [isResizing],
+  );
+
+  const handleMouseUp = useCallback(() => {
+    setIsResizing(false);
+    document.body.style.cursor = "";
+    document.body.style.userSelect = "";
+  }, []);
+
+  const handleMouseDown = useCallback((e: React.MouseEvent) => {
+    e.preventDefault();
+    setIsResizing(true);
+    document.body.style.cursor = "col-resize";
+    document.body.style.userSelect = "none";
+  }, []);
+
+  // Fixed selection handlers with proper dependencies
+  const handleToggleSelection = useCallback(
+    (courseIndex: number, memberIndex: number) => {
+      const key = `${courseIndex}-${memberIndex}`;
+      onSelectionsChange({
+        ...selections,
+        [key]: !selections[key],
+      });
+    },
+    [selections, onSelectionsChange],
+  );
+
+  const isSelected = useCallback(
+    (courseIndex: number, memberIndex: number) => {
+      const key = `${courseIndex}-${memberIndex}`;
+      return Boolean(selections[key]);
+    },
+    [selections],
+  );
+
+  // Event listeners for resize
+  useEffect(() => {
+    if (isResizing) {
+      const handleGlobalMouseMove = (e: MouseEvent) => handleMouseMove(e);
+      const handleGlobalMouseUp = () => handleMouseUp();
+
+      document.addEventListener("mousemove", handleGlobalMouseMove);
+      document.addEventListener("mouseup", handleGlobalMouseUp);
+
+      return () => {
+        document.removeEventListener("mousemove", handleGlobalMouseMove);
+        document.removeEventListener("mouseup", handleGlobalMouseUp);
+      };
+    }
+  }, [isResizing, handleMouseMove, handleMouseUp]);
+
+  return (
+    <div
+      ref={containerRef}
+      className="h-[70vh] training-plan-container flex relative"
+    >
+      <div
+        className="h-full overflow-hidden catalog-scroll-container"
+        style={{ width: `${leftWidth}%` }}
+      >
+        <div className="bg-white h-full">
+          <Catalog
+            ref={catalogTableRef}
+            onCoursesLoad={onCoursesLoad}
+            onScroll={handleCatalogScroll}
+          />
+        </div>
+      </div>
+
+      <div
+        className="bg-gradient-to-b from-orange-500 to-pink-500 cursor-col-resize hover:from-orange-600 hover:to-pink-600 transition-colors duration-150 group relative flex-shrink-0 flex items-center justify-center hover:cursor-grab active:cursor-grabbing"
+        style={{ width: "10px" }}
+        onMouseDown={handleMouseDown}
+      >
+        <div
+          className="bg-orange-500 rounded-md shadow-lg group-hover:bg-orange-600 transition-colors duration-150 flex flex-col items-center justify-center z-10 border border-orange-400 gap-1"
+          style={{ width: "14px", height: "32px" }}
+        >
+          <div className="w-1 h-1 bg-amber-800 rounded-full"></div>
+          <div className="w-1 h-1 bg-amber-800 rounded-full"></div>
+          <div className="w-1 h-1 bg-amber-800 rounded-full"></div>
+        </div>
+      </div>
+
+      <div
+        className="h-full overflow-hidden team-scroll-container"
+        style={{ width: `${100 - leftWidth}%` }}
+      >
+        <div className="bg-white h-full">
+          <Team
+            ref={teamTableRef}
+            courses={courses}
+            courseCount={courseCount}
+            teamMembers={teamMembers}
+            selections={selections}
+            onTeamMembersChange={onTeamMembersChange}
+            onToggleSelection={handleToggleSelection}
+            isSelected={isSelected}
+            onScroll={handleTeamScroll}
+          />
+        </div>
+      </div>
+    </div>
+  );
+};
+
+PlanScroller.displayName = "PlanScroller";
+
+interface PlanEditorProps {
+  onBackToWelcome: () => void;
+  hasExistingPlan: boolean;
+}
+
+// Utility function to create initial state
+const createInitialState = (): PlanState => ({
+  title: DEFAULT_PLAN_TITLE,
+  courseCount: 0,
+  teamMembers: [DEFAULT_TEAM_NAMES[0]],
+  selections: {},
+});
+
+const PlanEditor: React.FC<PlanEditorProps> = ({
+  onBackToWelcome,
+  hasExistingPlan,
+}) => {
+  const initialState = useMemo(() => createInitialState(), []);
+
+  // Use reducer for history management
+  const [history, dispatchHistory] = useReducer(historyReducer, {
+    past: [],
+    present: initialState,
+    future: [],
+  });
+
+  // Separate state for courses and budget (not part of history)
+  const [courses, setCourses] = useState<Course[]>([]);
+  const [budget, setBudget] = useState<number | null>(null);
+
+  const {
+    showConfirmation,
+    showConfirmationModal,
+    handleConfirmAction,
+    handleCancelAction,
+    confirmationTitle,
+    confirmationMessage,
+  } = useConfirmationModal();
+
+  // Extract current state values
+  const {
+    title: planTitle,
+    courseCount,
+    teamMembers,
+    selections,
+  } = history.present;
+
+  // Memoize hasChanges calculation
+  const hasChanges = useMemo(() => {
+    return JSON.stringify(history.present) !== JSON.stringify(initialState);
+  }, [history.present, initialState]);
+
+  // Memoize total calculation
+  const total = useMemo(() => {
+    return Object.entries(selections).reduce((acc, [key, isSelected]) => {
+      if (!isSelected) return acc;
+
+      const [courseIndexStr] = key.split("-");
+      const courseIndex = parseInt(courseIndexStr, 10);
+      const course = courses[courseIndex];
+
+      return acc + (course?.Price || 0);
+    }, 0);
+  }, [selections, courses]);
+
+  // History actions
+  const canUndo = history.past.length > 0;
+  const canRedo = history.future.length > 0;
+
+  // Set page title on mount
+  useEffect(() => {
+    document.title = PAGE_TITLE_EDIT;
+  }, []);
+
+  // Handle browser back button
+  useEffect(() => {
+    const handlePopState = (e: PopStateEvent) => {
+      e.preventDefault();
+      if (hasChanges) {
+        showConfirmationModal(
+          () => onBackToWelcome(),
+          "Unsaved Changes!",
+          "We recommend downloading your current plan before continuing. Are you sure you want to leave?",
+        );
+        // Push the state back to prevent navigation
+        window.history.pushState({ view: "edit" }, "", "#edit");
+      } else {
+        onBackToWelcome();
+      }
+    };
+
+    window.addEventListener("popstate", handlePopState);
+    return () => window.removeEventListener("popstate", handlePopState);
+  }, [hasChanges, showConfirmationModal, onBackToWelcome]);
+
+  // Optimized handlers with proper dependencies
+  const updateState = useCallback(
+    (updates: Partial<PlanState>) => {
+      const newState = { ...history.present, ...updates };
+      dispatchHistory({ type: "UPDATE", payload: newState });
+    },
+    [history.present],
+  );
+
+  const handleUpdateTitle = useCallback(
+    (newTitle: string) => {
+      updateState({ title: newTitle });
+    },
+    [updateState],
+  );
+
+  const handleDownload = useCallback(() => {
+    alert("Coming soon!");
+  }, []);
+
+  // Fixed courses load handler - ensures proper state sync
+  const handleCoursesLoad = useCallback(
+    (count: number, newCourses: Course[]) => {
+      // Always update courses first
+      setCourses(newCourses);
+      
+      // Only update course count if it actually changed
+      if (count !== courseCount) {
+        updateState({ courseCount: count });
+      }
+    },
+    [courseCount, updateState],
+  );
+
+  const handleTeamMembersChange = useCallback(
+    (newTeamMembers: string[]) => {
+      updateState({ teamMembers: newTeamMembers });
+    },
+    [updateState],
+  );
+
+  // FIXED: Remove selections dependency to prevent infinite re-renders
+  const handleSelectionsChange = useCallback(
+    (updater: Record<string, boolean> | ((prev: Record<string, boolean>) => Record<string, boolean>)) => {
+      if (typeof updater === 'function') {
+        // Use functional update to get the current selections without depending on them
+        dispatchHistory(prevHistory => ({
+          type: "UPDATE",
+          payload: { ...prevHistory.present, selections: updater(prevHistory.present.selections) }
+        }));
+      } else {
+        updateState({ selections: updater });
+      }
+    },
+    [updateState],
+  );
+
+  const handleBudgetChange = useCallback((newBudget: number | null) => {
+    setBudget(newBudget);
+  }, []);
+
+  const handleUndo = useCallback(() => {
+    dispatchHistory({ type: "UNDO" });
+  }, []);
+
+  const handleRedo = useCallback(() => {
+    dispatchHistory({ type: "REDO" });
+  }, []);
+
+  const handleBackToWelcome = useCallback(() => {
+    if (hasChanges) {
+      showConfirmationModal(
+        () => onBackToWelcome(),
+        "Unsaved Changes!",
+        "We recommend downloading your current plan before continuing. Are you sure you want to leave?",
+      );
+    } else {
+      onBackToWelcome();
+    }
+  }, [hasChanges, showConfirmationModal, onBackToWelcome]);
+
+  return (
+    <div className="min-h-screen bg-gray-50 flex flex-col">
+      <Header
+        onBackToWelcome={handleBackToWelcome}
+        planTitle={planTitle}
+        onUpdateTitle={handleUpdateTitle}
+        onUndo={handleUndo}
+        onRedo={handleRedo}
+        onDownload={handleDownload}
+        canUndo={canUndo}
+        canRedo={canRedo}
+        total={total}
+        onBudgetChange={handleBudgetChange}
+      />
+
+      <PlanScroller
+        courseCount={courseCount}
+        courses={courses}
+        teamMembers={teamMembers}
+        selections={selections}
+        onCoursesLoad={handleCoursesLoad}
+        onTeamMembersChange={handleTeamMembersChange}
+        onSelectionsChange={handleSelectionsChange}
+      />
+
+      <div className="mt-16">
+        <Footer />
+      </div>
+
+      <ConfirmationModal
+        isOpen={showConfirmation}
+        onClose={handleCancelAction}
+        onConfirm={handleConfirmAction}
+        title={confirmationTitle}
+        message={confirmationMessage}
+      />
+    </div>
+  );
+};
+
+export default PlanEditor;

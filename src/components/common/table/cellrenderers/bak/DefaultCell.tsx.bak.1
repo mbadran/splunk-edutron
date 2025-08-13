@@ -1,0 +1,29 @@
+import React from "react";
+
+// Base cell renderer interface
+export interface CellRenderer<TData> {
+  value: unknown;
+  row: { original: TData; index: number };
+  column: { id: string };
+}
+
+// Default cell renderer for basic text display
+export const DefaultCell = <TData,>({
+  value,
+  row,
+  column,
+  className = "",
+}: CellRenderer<TData> & { className?: string }) => {
+  const cellId = `cell-${column.id}-${row.index}`;
+
+  return (
+    <div id={cellId} className={`flex items-center ${className}`}>
+      <span
+        className="truncate w-full"
+        title={String(value || "")}
+      >
+        {String(value || "")}
+      </span>
+    </div>
+  );
+};

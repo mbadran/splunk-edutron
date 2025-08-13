@@ -1,0 +1,424 @@
+// NEW: Selection management action atom
+export const toggleSelectionAtom = atom(
+  null,
+  (get, set, { course, member }: { course: Course; member: Person }) => {
+    const currentState = get(planStateAtom);
+    const personKey = normalizePerson(member.name);
+    
+    let updatedSelections;
+    if (hasSelectionForCourse(currentState.selections, member.name, course.ID)) {
+      // Remove selection
+      updatedSelections = removeCourseSelection(currentState.selections, member.name, course.ID);
+    } else {
+      // Add selection
+      updatedSelections = addCourseSelection(currentState.selections, member.name, course.ID);
+    }
+    
+    set(updatePlanStateAtom, { selections: updatedSelections });
+  },
+);import { atom } from "jotai";
+import { atomWithStorage } from "jotai/utils";
+import { Catalog, Status, Course, PlanState, Person } from "@/types/types";
+import { DEFAULT_PLAN_TITLE, DEFAULT_TEAM_NAMES, DEFAULT_CATALOG } from "@/utils/constants";
+
+// Global working indicator state
+export const workingAtom = atom<boolean>(false);
+export const workingMessageAtom = atom<string>("");
+
+// Catalog state atoms - simple data storage only
+export const catalogsAtom = atom<Catalog[]>([]);
+export const catalogsLoadingAtom = atom<boolean>(false);
+export const catalogsErrorAtom = atom<string | null>(null);
+
+// Planner-specific atoms as per PRD data flow requirements
+export const plannerCatalogsAtom = atom<string[]>([DEFAULT_CATALOG]); // Default to hardcoded catalog for MVP
+
+// NEW: Scroll sync state atoms (replacing useState in scrollSync hook)
+export const scrollTopAtom = atom<number>(0);
+export const isScrollingSyncAtom = atom<boolean>(false);
+
+// NEW: PlanCalculator state atoms (replacing useState)
+export const isEditingBudgetAtom = atom<boolean>(false);
+export const budgetInputAtom = atom<string>("");
+export const isCreditsUnitModeAtom = atom<boolean>(true); // Start with TUs as requested
+
+// NEW: Team editing state atoms (replacing local atoms in PlanTeams)
+export const editingTeamMemberAtom = atom<number | null>(null);
+export const editingTeamMemberValueAtom = atom<string>("");
+
+// Helper function to normalize person name for selection keys
+export const normalizePerson = (personName: string): string => {
+  return personName.toLowerCase().replace(/\s+/g, '_').replace(/[^a-z0-9_]/g, '');
+};
+
+// Helper function to add course selection for a person
+export const addCourseSelection = (selections: Record<string, string[]>, personName: string, courseId: string): Record<string, string[]> => {
+  const normalizedName = normalizePerson(personName);
+  const currentCourses = selections[normalizedName] || [];
+  
+  if (!currentCourses.includes(courseId)) {
+    return {
+      ...selections,
+      [normalizedName]: [...currentCourses, courseId],
+    };
+  }
+  
+  return selections;
+};
+
+// Helper function to remove course selection for a person
+export const removeCourseSelection = (selections: Record<string, string[]>, personName: string, courseId: string): Record<string, string[]> => {
+  const normalizedName = normalizePerson(personName);
+  const currentCourses = selections[normalizedName] || [];
+  
+  const updatedCourses = currentCourses.filter(id => id !== courseId);
+  
+  if (updatedCourses.length === 0) {
+    const { [normalizedName]: removed, ...rest } = selections;
+    return rest;
+  }
+  
+  return {
+    ...selections,
+    [normalizedName]: updatedCourses,
+  };
+};
+
+// Helper function to check if person has course selected
+export const hasSelectionForCourse = (selections: Record<string, string[]>, personName: string, courseId: string): boolean => {
+  const normalizedName = normalizePerson(personName);
+  const courses = selections[normalizedName] || [];
+  return courses.includes(courseId);
+};
+
+// Create initial plan state with stable IDs to prevent hydration errors
+const createInitialPlanState = (): PlanState => {
+  // Use stable values for initial state to prevent hydration errors
+  // Only use timestamps for new plans created by user action
+  const defaultMember: Person = {
+    id: `member-initial`, // Stable initial ID
+    name: DEFAULT_TEAM_NAMES[0],
+    email: "",
+    role: "",
+  };
+
+  return {
+    id: `plan-initial`, // Stable initial ID
+    title: DEFAULT_PLAN_TITLE,
+    description: "",
+    catalogs: [DEFAULT_CATALOG],
+    teamMembers: [defaultMember],
+    selections: {}, // Now Record<string, string[]> - person_name: [courseIds]
+    budget: null,
+    createdAt: "2024-01-01T00:00:00.000Z", // Stable initial date
+    updatedAt: "2024-01-01T00:00:00.000Z", // Stable initial date
+  };
+};
+
+// Global plan state atom - localStorage persistence
+export const planStateAtom = atomWithStorage<PlanState>("planState", createInitialPlanState());
+
+// Derived atoms for computed values
+export const catalogsCountAtom = atom((get) => get(catalogsAtom).length);
+export const totalCoursesAtom = atom((get) =>
+  get(catalogsAtom).reduce(
+    (total, catalog) => total + (catalog.courseCount || 0),
+    0,
+  ),
+);
+
+// Derived atom to get all courses from planner-selected catalogs
+export const plannerCoursesAtom = atom((get) => {
+  const catalogs = get(catalogsAtom);
+  const planState = get(planStateAtom);
+  
+  const courses: Course[] = [];
+  planState.catalogs.forEach(catalogId => {
+    const catalog = catalogs.find(c => c.id === catalogId);
+    if (catalog && catalog.courses) {
+      courses.push(...catalog.courses);
+    }
+  });
+  
+  return courses;
+});
+
+// Derived atom for plan total calculation
+export const planTotalAtom = atom((get) => {
+  const courses = get(plannerCoursesAtom);
+  const planState = get(planStateAtom);
+  
+  let total = 0;
+  Object.values(planState.selections).forEach(courseIds => {
+    courseIds.forEach(courseId => {
+      const course = courses.find(c => c.ID === courseId);
+      if (course) {
+        total += course.Price;
+      }
+    });
+  });
+  
+  return total;
+});
+
+// Derived atom for cost per member calculation
+export const planCostPerMemberAtom = atom((get) => {
+  const courses = get(plannerCoursesAtom);
+  const planState = get(planStateAtom);
+  const costPerMember: Record<string, number> = {};
+  
+  // Initialize all team members with 0 cost
+  planState.teamMembers.forEach(member => {
+    costPerMember[member.name] = 0;
+  });
+  
+  // Calculate cost for each member based on selections
+  Object.entries(planState.selections).forEach(([personKey, courseIds]) => {
+    // Convert normalized key back to display name
+    const personName = personKey.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
+    let memberCost = 0;
+    
+    courseIds.forEach(courseId => {
+      const course = courses.find(c => c.ID === courseId);
+      if (course) {
+        memberCost += course.Price;
+      }
+    });
+    
+    costPerMember[personName] = memberCost;
+  });
+  
+  return costPerMember;
+});
+
+// Derived atom for selected courses count
+export const planSelectedCoursesAtom = atom((get) => {
+  const planState = get(planStateAtom);
+  return Object.values(planState.selections).reduce((total, courseIds) => total + courseIds.length, 0);
+});
+
+// Working indicator helper - simplified
+export const setStatusAtom = atom(
+  null,
+  (get, set, { isWorking, message }: Status) => {
+    set(workingAtom, isWorking);
+    set(workingMessageAtom, message || "");
+  },
+);
+
+// Plan state update helpers
+export const updatePlanStateAtom = atom(
+  null,
+  (get, set, updates: Partial<PlanState>) => {
+    const currentState = get(planStateAtom);
+    const updatedState = {
+      ...currentState,
+      ...updates,
+      updatedAt: new Date().toISOString(),
+    };
+    set(planStateAtom, updatedState);
+    
+    // Update status to show operation completed
+    set(setStatusAtom, { isWorking: false, message: "Plan updated" });
+    
+    // Clear status after brief delay
+    setTimeout(() => {
+      set(setStatusAtom, { isWorking: false, message: "" });
+    }, 1000);
+  },
+);
+
+// NEW: Scroll sync action atoms
+export const syncScrollAtom = atom(
+  null,
+  (get, set, { scrollOffset, skipSync = false }: { scrollOffset: number; skipSync?: boolean }) => {
+    if (get(isScrollingSyncAtom) && !skipSync) return;
+    
+    set(scrollTopAtom, scrollOffset);
+    
+    if (!skipSync) {
+      set(isScrollingSyncAtom, true);
+      
+      // Clear sync flag after short delay
+      setTimeout(() => {
+        set(isScrollingSyncAtom, false);
+      }, 16); // ~1 frame at 60fps, more responsive than 10ms
+    }
+  },
+);
+
+// NEW: Budget management action atoms
+export const setBudgetAtom = atom(
+  null,
+  (get, set, budget: number | null) => {
+    set(setStatusAtom, { isWorking: true, message: "Updating budget..." });
+    
+    const currentState = get(planStateAtom);
+    set(planStateAtom, {
+      ...currentState,
+      budget,
+      updatedAt: new Date().toISOString(),
+    });
+    
+    // Clear editing state
+    set(isEditingBudgetAtom, false);
+    set(budgetInputAtom, "");
+    
+    set(setStatusAtom, { isWorking: false, message: "" });
+  },
+);
+
+// NEW: Team member management action atoms
+export const addTeamMemberAtom = atom(
+  null,
+  (get, set, newMember: Person) => {
+    set(setStatusAtom, { isWorking: true, message: "Adding team member..." });
+    
+    const currentState = get(planStateAtom);
+    
+    // Generate unique timestamp-based ID for new members
+    const memberWithId = {
+      ...newMember,
+      id: newMember.id || `member-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`
+    };
+    
+    const updatedMembers = [...currentState.teamMembers, memberWithId];
+    
+    set(updatePlanStateAtom, { teamMembers: updatedMembers });
+  },
+);
+
+export const updateTeamMemberAtom = atom(
+  null,
+  (get, set, { index, updates }: { index: number; updates: Partial<Person> }) => {
+    set(setStatusAtom, { isWorking: true, message: "Updating team member..." });
+    
+    const currentState = get(planStateAtom);
+    const oldMember = currentState.teamMembers[index];
+    const updatedMembers = [...currentState.teamMembers];
+    updatedMembers[index] = { ...updatedMembers[index], ...updates };
+    
+    // If name is being updated, we need to update selection keys
+    let updatedSelections = currentState.selections;
+    if (updates.name && updates.name !== oldMember.name) {
+      updatedSelections = { ...currentState.selections };
+      const oldNameKey = normalizePerson(oldMember.name);
+      const newNameKey = normalizePerson(updates.name);
+      
+      // Move selections from old key to new key
+      if (updatedSelections[oldNameKey]) {
+        updatedSelections[newNameKey] = updatedSelections[oldNameKey];
+        delete updatedSelections[oldNameKey];
+      }
+    }
+    
+    set(updatePlanStateAtom, { 
+      teamMembers: updatedMembers,
+      selections: updatedSelections
+    });
+    
+    // Clear editing state
+    set(editingTeamMemberAtom, null);
+    set(editingTeamMemberValueAtom, "");
+  },
+);
+
+export const deleteTeamMemberAtom = atom(
+  null,
+  (get, set, index: number) => {
+    set(setStatusAtom, { isWorking: true, message: "Removing team member..." });
+    
+    const currentState = get(planStateAtom);
+    const memberToDelete = currentState.teamMembers[index];
+    const updatedMembers = currentState.teamMembers.filter((_, i) => i !== index);
+    
+    // Clean up selections for deleted member
+    const updatedSelections = { ...currentState.selections };
+    const memberKey = normalizePerson(memberToDelete.name);
+    delete updatedSelections[memberKey];
+    
+    set(updatePlanStateAtom, { 
+      teamMembers: updatedMembers,
+      selections: updatedSelections
+    });
+    
+    // Clear editing state if needed
+    const currentEditing = get(editingTeamMemberAtom);
+    if (currentEditing === index) {
+      set(editingTeamMemberAtom, null);
+      set(editingTeamMemberValueAtom, "");
+    } else if (currentEditing !== null && currentEditing > index) {
+      set(editingTeamMemberAtom, currentEditing - 1);
+    }
+  },
+);
+
+// NEW: Create new plan action atom
+export const createNewPlanAtom = atom(
+  null,
+  (get, set) => {
+    set(setStatusAtom, { isWorking: true, message: "Creating new plan..." });
+    
+    // Create completely fresh plan state with unique IDs (only when user explicitly creates new plan)
+    const now = new Date().toISOString();
+    const timestamp = Date.now();
+    
+    const defaultMember: Person = {
+      id: `member-${timestamp}-${Math.random().toString(36).substr(2, 9)}`,
+      name: DEFAULT_TEAM_NAMES[0],
+      email: "",
+      role: "",
+    };
+
+    const newPlanState: PlanState = {
+      id: `plan-${timestamp}-${Math.random().toString(36).substr(2, 9)}`,
+      title: DEFAULT_PLAN_TITLE,
+      description: "",
+      catalogs: [DEFAULT_CATALOG],
+      teamMembers: [defaultMember],
+      selections: {},
+      budget: null,
+      createdAt: now,
+      updatedAt: now,
+    };
+    
+    set(planStateAtom, newPlanState);
+    
+    // Reset other related state
+    set(isEditingBudgetAtom, false);
+    set(budgetInputAtom, "");
+    set(editingTeamMemberAtom, null);
+    set(editingTeamMemberValueAtom, "");
+    
+    setTimeout(() => {
+      set(setStatusAtom, { isWorking: false, message: "New plan created!" });
+      setTimeout(() => {
+        set(setStatusAtom, { isWorking: false, message: "" });
+      }, 1500);
+    }, 500);
+  },
+);
+
+// NEW: Reset plan selections action atom
+export const resetPlanSelectionsAtom = atom(
+  null,
+  (get, set) => {
+    set(setStatusAtom, { isWorking: true, message: "Clearing course selections..." });
+    
+    const currentState = get(planStateAtom);
+    const resetState = {
+      ...currentState,
+      selections: {},
+      updatedAt: new Date().toISOString(),
+    };
+    
+    set(planStateAtom, resetState);
+    
+    setTimeout(() => {
+      set(setStatusAtom, { isWorking: false, message: "Course selections cleared!" });
+      setTimeout(() => {
+        set(setStatusAtom, { isWorking: false, message: "" });
+      }, 1500);
+    }, 500);
+  },
+);

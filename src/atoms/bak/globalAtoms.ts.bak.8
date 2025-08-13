@@ -1,0 +1,314 @@
+import { atom } from "jotai";
+import { Catalog, Status, Course, PlanState, Person } from "@/types/types";
+import { DEFAULT_PLAN_TITLE, DEFAULT_TEAM_NAMES, DEFAULT_CATALOG } from "@/utils/constants";
+
+// Global working indicator state
+export const workingAtom = atom<boolean>(false);
+export const workingMessageAtom = atom<string>("");
+
+// Catalog state atoms - simple data storage only
+export const catalogsAtom = atom<Catalog[]>([]);
+export const catalogsLoadingAtom = atom<boolean>(false);
+export const catalogsErrorAtom = atom<string | null>(null);
+
+// Planner-specific atoms as per PRD data flow requirements
+export const plannerCatalogsAtom = atom<string[]>([DEFAULT_CATALOG]); // Default to hardcoded catalog for MVP
+
+// NEW: Scroll sync state atoms (replacing useState in scrollSync hook)
+export const scrollTopAtom = atom<number>(0);
+export const isScrollingSyncAtom = atom<boolean>(false);
+
+// NEW: PlanCalculator state atoms (replacing useState)
+export const isEditingBudgetAtom = atom<boolean>(false);
+export const budgetInputAtom = atom<string>("");
+export const isCreditsUnitModeAtom = atom<boolean>(true); // Start with TUs as requested
+
+// NEW: Team editing state atoms (replacing local atoms in PlanTeams)
+export const editingTeamMemberAtom = atom<number | null>(null);
+export const editingTeamMemberValueAtom = atom<string>("");
+
+// Helper function to generate plan selection key
+export const createPlanSelectionKey = (personName: string, courseId: string): string => {
+  const normalizedPersonName = personName.toLowerCase().replace(/\s+/g, '-');
+  return `${normalizedPersonName}_${courseId}`;
+};
+
+// Helper function to parse plan selection key
+export const parsePlanSelectionKey = (key: string): { personName: string; courseId: string } => {
+  const [personPart, courseId] = key.split('_');
+  const personName = personPart.replace(/-/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
+  return { personName, courseId };
+};
+
+// Create initial plan state with stable IDs to prevent hydration errors
+const createInitialPlanState = (): PlanState => {
+  const defaultMember: Person = {
+    id: `member-initial`, // Use stable ID instead of Date.now() + Math.random()
+    name: DEFAULT_TEAM_NAMES[0],
+    email: "",
+    role: "",
+  };
+
+  return {
+    id: `plan-initial`, // Use stable ID instead of Date.now() + Math.random()
+    title: DEFAULT_PLAN_TITLE,
+    description: "",
+    catalogs: [DEFAULT_CATALOG],
+    teamMembers: [defaultMember],
+    selections: {},
+    budget: null,
+    createdAt: "2024-01-01T00:00:00.000Z", // Use stable date instead of new Date()
+    updatedAt: "2024-01-01T00:00:00.000Z", // Use stable date instead of new Date()
+  };
+};
+
+// Global plan state atom - session-only persistence (no atomWithStorage)
+export const planStateAtom = atom<PlanState>(createInitialPlanState());
+
+// Derived atoms for computed values
+export const catalogsCountAtom = atom((get) => get(catalogsAtom).length);
+export const totalCoursesAtom = atom((get) =>
+  get(catalogsAtom).reduce(
+    (total, catalog) => total + (catalog.courseCount || 0),
+    0,
+  ),
+);
+
+// Derived atom to get all courses from planner-selected catalogs
+export const plannerCoursesAtom = atom((get) => {
+  const catalogs = get(catalogsAtom);
+  const planState = get(planStateAtom);
+  
+  const courses: Course[] = [];
+  planState.catalogs.forEach(catalogId => {
+    const catalog = catalogs.find(c => c.id === catalogId);
+    if (catalog && catalog.courses) {
+      courses.push(...catalog.courses);
+    }
+  });
+  
+  return courses;
+});
+
+// Derived atom for plan total calculation
+export const planTotalAtom = atom((get) => {
+  const courses = get(plannerCoursesAtom);
+  const planState = get(planStateAtom);
+  
+  return Object.entries(planState.selections).reduce((total, [selectionKey, isSelected]) => {
+    if (!isSelected) return total;
+    
+    const { courseId } = parsePlanSelectionKey(selectionKey);
+    const course = courses.find(c => c.ID === courseId);
+    return total + (course?.Price || 0);
+  }, 0);
+});
+
+// Derived atom for cost per member calculation
+export const planCostPerMemberAtom = atom((get) => {
+  const courses = get(plannerCoursesAtom);
+  const planState = get(planStateAtom);
+  const costPerMember: Record<string, number> = {};
+  
+  // Initialize all team members with 0 cost
+  planState.teamMembers.forEach(member => {
+    costPerMember[member.name] = 0;
+  });
+  
+  // Calculate cost for each member based on selections
+  Object.entries(planState.selections).forEach(([selectionKey, isSelected]) => {
+    if (!isSelected) return;
+    
+    const { personName, courseId } = parsePlanSelectionKey(selectionKey);
+    const course = courses.find(c => c.ID === courseId);
+    if (course) {
+      costPerMember[personName] = (costPerMember[personName] || 0) + course.Price;
+    }
+  });
+  
+  return costPerMember;
+});
+
+// Derived atom for selected courses count
+export const planSelectedCoursesAtom = atom((get) => {
+  const planState = get(planStateAtom);
+  return Object.values(planState.selections).filter(Boolean).length;
+});
+
+// Working indicator helper - simplified
+export const setStatusAtom = atom(
+  null,
+  (get, set, { isWorking, message }: Status) => {
+    set(workingAtom, isWorking);
+    set(workingMessageAtom, message || "");
+  },
+);
+
+// Plan state update helpers
+export const updatePlanStateAtom = atom(
+  null,
+  (get, set, updates: Partial<PlanState>) => {
+    const currentState = get(planStateAtom);
+    const updatedState = {
+      ...currentState,
+      ...updates,
+      updatedAt: new Date().toISOString(),
+    };
+    set(planStateAtom, updatedState);
+    
+    // Update status to show operation completed
+    set(setStatusAtom, { isWorking: false, message: "Plan updated" });
+    
+    // Clear status after brief delay
+    setTimeout(() => {
+      set(setStatusAtom, { isWorking: false, message: "" });
+    }, 1000);
+  },
+);
+
+// NEW: Scroll sync action atoms
+export const syncScrollAtom = atom(
+  null,
+  (get, set, { scrollOffset, skipSync = false }: { scrollOffset: number; skipSync?: boolean }) => {
+    if (get(isScrollingSyncAtom) && !skipSync) return;
+    
+    set(scrollTopAtom, scrollOffset);
+    
+    if (!skipSync) {
+      set(isScrollingSyncAtom, true);
+      
+      // Clear sync flag after short delay
+      setTimeout(() => {
+        set(isScrollingSyncAtom, false);
+      }, 16); // ~1 frame at 60fps, more responsive than 10ms
+    }
+  },
+);
+
+// NEW: Budget management action atoms
+export const setBudgetAtom = atom(
+  null,
+  (get, set, budget: number | null) => {
+    set(setStatusAtom, { isWorking: true, message: "Updating budget..." });
+    
+    const currentState = get(planStateAtom);
+    set(planStateAtom, {
+      ...currentState,
+      budget,
+      updatedAt: new Date().toISOString(),
+    });
+    
+    // Clear editing state
+    set(isEditingBudgetAtom, false);
+    set(budgetInputAtom, "");
+    
+    set(setStatusAtom, { isWorking: false, message: "" });
+  },
+);
+
+// NEW: Team member management action atoms
+export const addTeamMemberAtom = atom(
+  null,
+  (get, set, newMember: Person) => {
+    set(setStatusAtom, { isWorking: true, message: "Adding team member..." });
+    
+    const currentState = get(planStateAtom);
+    
+    // Ensure member has stable ID if not provided
+    const memberWithId = {
+      ...newMember,
+      id: newMember.id || `member-${currentState.teamMembers.length}`
+    };
+    
+    const updatedMembers = [...currentState.teamMembers, memberWithId];
+    
+    set(updatePlanStateAtom, { teamMembers: updatedMembers });
+  },
+);
+
+export const updateTeamMemberAtom = atom(
+  null,
+  (get, set, { index, updates }: { index: number; updates: Partial<Person> }) => {
+    set(setStatusAtom, { isWorking: true, message: "Updating team member..." });
+    
+    const currentState = get(planStateAtom);
+    const oldMember = currentState.teamMembers[index];
+    const updatedMembers = [...currentState.teamMembers];
+    updatedMembers[index] = { ...updatedMembers[index], ...updates };
+    
+    // If name is being updated, we need to update selection keys
+    let updatedSelections = currentState.selections;
+    if (updates.name && updates.name !== oldMember.name) {
+      updatedSelections = { ...currentState.selections };
+      const oldNameKey = oldMember.name.toLowerCase().replace(/\s+/g, '-');
+      const newNameKey = updates.name.toLowerCase().replace(/\s+/g, '-');
+      
+      Object.keys(updatedSelections).forEach((key) => {
+        if (key.startsWith(oldNameKey + '_')) {
+          const courseId = key.split('_')[1];
+          const newKey = createPlanSelectionKey(updates.name!, courseId);
+          updatedSelections[newKey] = updatedSelections[key];
+          delete updatedSelections[key];
+        }
+      });
+    }
+    
+    set(updatePlanStateAtom, { 
+      teamMembers: updatedMembers,
+      selections: updatedSelections
+    });
+    
+    // Clear editing state
+    set(editingTeamMemberAtom, null);
+    set(editingTeamMemberValueAtom, "");
+  },
+);
+
+export const deleteTeamMemberAtom = atom(
+  null,
+  (get, set, index: number) => {
+    set(setStatusAtom, { isWorking: true, message: "Removing team member..." });
+    
+    const currentState = get(planStateAtom);
+    const memberToDelete = currentState.teamMembers[index];
+    const updatedMembers = currentState.teamMembers.filter((_, i) => i !== index);
+    
+    // Clean up selections for deleted member
+    const updatedSelections = { ...currentState.selections };
+    Object.keys(updatedSelections).forEach((key) => {
+      if (key.startsWith(memberToDelete.name.toLowerCase().replace(/\s+/g, "-"))) {
+        delete updatedSelections[key];
+      }
+    });
+    
+    set(updatePlanStateAtom, { 
+      teamMembers: updatedMembers,
+      selections: updatedSelections
+    });
+    
+    // Clear editing state if needed
+    const currentEditing = get(editingTeamMemberAtom);
+    if (currentEditing === index) {
+      set(editingTeamMemberAtom, null);
+      set(editingTeamMemberValueAtom, "");
+    } else if (currentEditing !== null && currentEditing > index) {
+      set(editingTeamMemberAtom, currentEditing - 1);
+    }
+  },
+);
+
+// NEW: Selection management action atom
+export const toggleSelectionAtom = atom(
+  null,
+  (get, set, { course, member }: { course: Course; member: Person }) => {
+    const currentState = get(planStateAtom);
+    const key = createPlanSelectionKey(member.name, course.ID);
+    
+    const updatedSelections = {
+      ...currentState.selections,
+      [key]: !currentState.selections[key],
+    };
+    
+    set(updatePlanStateAtom, { selections: updatedSelections });
+  },
+);

@@ -1,0 +1,269 @@
+import React, { useState, useCallback, useRef } from "react";
+import Header from "@/components/common/Header";
+import CatalogTable from "./CatalogTable";
+import { useScrollSync } from "@/hooks/scrollSync";
+import { useRenderDebugger } from "@/hooks/rendering";
+import { Course } from "@/types/types";
+import { DEFAULT_PLAN_TITLE, DEFAULT_TEAM_NAMES } from "@/utils/constants";
+
+// Constants
+const RESIZE_BOUNDS = { min: 30, max: 70 };
+const DEFAULT_LEFT_WIDTH = 50;
+
+interface PlanScrollerProps {
+  courses: Course[];
+  teamMembers: string[];
+  selections: Record<string, boolean>;
+  onTeamMembersChange: (members: string[]) => void;
+  onSelectionsChange: (selections: Record<string, boolean>) => void;
+}
+
+const PlanScroller: React.FC<PlanScrollerProps> = ({
+  courses,
+  teamMembers,
+  selections,
+  onTeamMembersChange,
+  onSelectionsChange,
+}) => {
+  // Debug logging with circuit breaker
+  const debugInfo = useRenderDebugger("PlanScroller", {
+    coursesLength: courses.length,
+    teamMembersLength: teamMembers.length,
+    selectionsKeys: Object.keys(selections).length,
+  });
+
+  // CIRCUIT BREAKER: Stop rendering if excessive renders detected
+  if (debugInfo.isCritical) {
+    return (
+      <div className="h-[70vh] flex items-center justify-center bg-red-100 border-2 border-red-500">
+        <div className="text-center p-8">
+          <h2 className="text-2xl font-bold text-red-800 mb-4">
+            Component Stopped - Infinite Render Detected
+          </h2>
+          <p className="text-red-600 mb-4">
+            PlanScroller has been stopped due to excessive renders (
+            {debugInfo.renderCount}).
+          </p>
+          <button
+            onClick={() => window.location.reload()}
+            className="bg-red-600 text-white px-4 py-2 rounded hover:bg-red-700"
+          >
+            Reload Page
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  const [isResizing, setIsResizing] = useState(false);
+  const [leftWidth, setLeftWidth] = useState(DEFAULT_LEFT_WIDTH);
+  const containerRef = useRef<HTMLDivElement>(null);
+
+  const {
+    catalogTableRef,
+    teamTableRef,
+    handleCatalogScroll,
+    handleTeamScroll,
+  } = useScrollSync();
+
+  // Improved resize handling
+  const handleMouseMove = useCallback(
+    (e: MouseEvent) => {
+      if (!isResizing || !containerRef.current) return;
+
+      const containerRect = containerRef.current.getBoundingClientRect();
+      const newLeftWidth =
+        ((e.clientX - containerRect.left) / containerRect.width) * 100;
+
+      if (
+        newLeftWidth >= RESIZE_BOUNDS.min &&
+        newLeftWidth <= RESIZE_BOUNDS.max
+      ) {
+        setLeftWidth(newLeftWidth);
+      }
+    },
+    [isResizing],
+  );
+
+  const handleMouseUp = useCallback(() => {
+    setIsResizing(false);
+    document.body.style.cursor = "";
+    document.body.style.userSelect = "";
+  }, []);
+
+  const handleMouseDown = useCallback((e: React.MouseEvent) => {
+    e.preventDefault();
+    setIsResizing(true);
+    document.body.style.cursor = "col-resize";
+    document.body.style.userSelect = "none";
+  }, []);
+
+  return (
+    <div
+      ref={containerRef}
+      className="h-[70vh] training-plan-container flex relative"
+    >
+      <div
+        className="h-full overflow-hidden catalog-scroll-container"
+        style={{ width: `${leftWidth}%` }}
+      >
+        <div className="bg-white h-full">
+          <CatalogTable ref={catalogTableRef} onScroll={handleCatalogScroll} />
+        </div>
+      </div>
+
+      <div
+        className="bg-gradient-to-b from-orange-500 to-pink-500 cursor-col-resize hover:from-orange-600 hover:to-pink-600 transition-colors duration-150 group relative flex-shrink-0 flex items-center justify-center hover:cursor-grab active:cursor-grabbing"
+        style={{ width: "10px" }}
+        onMouseDown={handleMouseDown}
+      >
+        <div
+          className="bg-orange-500 rounded-md shadow-lg group-hover:bg-orange-600 transition-colors duration-150 flex flex-col items-center justify-center z-10 border border-orange-400 gap-1"
+          style={{ width: "14px", height: "32px" }}
+        >
+          <div className="w-1 h-1 bg-amber-800 rounded-full"></div>
+          <div className="w-1 h-1 bg-amber-800 rounded-full"></div>
+          <div className="w-1 h-1 bg-amber-800 rounded-full"></div>
+        </div>
+      </div>
+
+      <div
+        className="h-full overflow-hidden team-scroll-container"
+        style={{ width: `${100 - leftWidth}%` }}
+      >
+        <div className="bg-white h-full">
+          <div className="flex items-center justify-center h-full bg-blue-50 border-2 border-blue-300">
+            <div className="text-center p-8">
+              <h3 className="text-lg font-semibold text-blue-800 mb-2">
+                Team Component Disabled
+              </h3>
+              <p className="text-blue-600">
+                Component temporarily disabled for debugging infinite renders
+              </p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+PlanScroller.displayName = "PlanScroller";
+
+interface PlanEditor {
+  onBackToHome: () => void;
+}
+
+const PlanEditor: React.FC<PlanEditor> = ({ onBackToHome }) => {
+  // Debug logging with critical render threshold and circuit breaker
+  const debugInfo = useRenderDebugger(
+    "PlanEditor",
+    {},
+    {
+      maxRenderWarning: 25, // Lower threshold for main component
+      onMaxDepthExceeded: (componentName, renderCount) => {
+        console.error(
+          `⚠️ ${componentName} exceeded maximum render depth (${renderCount}). Possible infinite render loop detected.`,
+        );
+      },
+    },
+  );
+
+  // CIRCUIT BREAKER: Stop rendering if excessive renders detected
+  if (debugInfo.isCritical) {
+    return (
+      <div className="min-h-screen bg-red-50 flex items-center justify-center">
+        <div className="text-center p-12 bg-white rounded-lg shadow-lg border-4 border-red-500">
+          <h1 className="text-3xl font-bold text-red-800 mb-6">
+            Application Stopped - Infinite Render Detected
+          </h1>
+          <p className="text-red-600 mb-4 text-lg">
+            PlanEditor has been stopped due to excessive renders (
+            {debugInfo.renderCount}).
+          </p>
+          <p className="text-gray-600 mb-8">
+            This prevents browser crashes and allows for debugging.
+          </p>
+          <div className="space-y-4">
+            <button
+              onClick={() => window.location.reload()}
+              className="bg-red-600 text-white px-6 py-3 rounded-lg hover:bg-red-700 text-lg font-semibold"
+            >
+              Reload Application
+            </button>
+            <br />
+            <button
+              onClick={() => onBackToHome()}
+              className="bg-gray-600 text-white px-6 py-3 rounded-lg hover:bg-gray-700"
+            >
+              Back to Home
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // SIMPLIFIED STATE MANAGEMENT
+  const [planTitle, setPlanTitle] = useState(DEFAULT_PLAN_TITLE);
+  const [teamMembers, setTeamMembers] = useState([DEFAULT_TEAM_NAMES[0]]);
+  const [selections, setSelections] = useState<Record<string, boolean>>({});
+  const [courses, setCourses] = useState<Course[]>([]);
+  const [budget, setBudget] = useState<number | null>(null);
+
+  // Memoized total calculation
+  const total = courses.reduce((acc, course, courseIndex) => {
+    const memberSelections = teamMembers.reduce((memberAcc, _, memberIndex) => {
+      const key = `${courseIndex}-${memberIndex}`;
+      return memberAcc + (selections[key] ? course.Price : 0);
+    }, 0);
+    return acc + memberSelections;
+  }, 0);
+
+  // SIMPLIFIED HANDLERS
+  const handleUpdateTitle = useCallback((newTitle: string) => {
+    setPlanTitle(newTitle);
+  }, []);
+
+  const handleDownload = useCallback(() => {
+    alert("Coming soon!");
+  }, []);
+
+  const handleTeamMembersChange = useCallback((newTeamMembers: string[]) => {
+    setTeamMembers(newTeamMembers);
+  }, []);
+
+  const handleSelectionsChange = useCallback(
+    (newSelections: Record<string, boolean>) => {
+      setSelections(newSelections);
+    },
+    [],
+  );
+
+  const handleBudgetChange = useCallback((newBudget: number | null) => {
+    setBudget(newBudget);
+  }, []);
+
+  return (
+    <div className="min-h-screen bg-gray-50 flex flex-col">
+      <Header
+        onBackToHome={onBackToHome}
+        planTitle={planTitle}
+        onUpdateTitle={handleUpdateTitle}
+        onDownload={handleDownload}
+        total={total}
+        onBudgetChange={handleBudgetChange}
+      />
+
+      <PlanScroller
+        courses={courses}
+        teamMembers={teamMembers}
+        selections={selections}
+        onTeamMembersChange={handleTeamMembersChange}
+        onSelectionsChange={handleSelectionsChange}
+      />
+    </div>
+  );
+};
+
+export default PlanEditor;

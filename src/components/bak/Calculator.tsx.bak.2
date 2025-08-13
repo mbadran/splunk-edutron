@@ -1,0 +1,184 @@
+import React, { useState } from 'react';
+import { Copy, Edit, DollarSign } from 'lucide-react';
+
+interface CalculatorProps {
+  total?: number;
+  onBudgetChange?: (budget: number | null) => void;
+}
+
+const Calculator = ({ total = 1500, onBudgetChange }: CalculatorProps) => {
+  const [budget, setBudget] = useState<number | null>(null);
+  const [isEditingBudget, setIsEditingBudget] = useState(false);
+  const [budgetInput, setBudgetInput] = useState('0');
+  const [isCreditsMode, setIsCreditsMode] = useState(false);
+
+  const handleSetBudget = () => {
+    setIsEditingBudget(true);
+    setBudgetInput('0');
+  };
+
+  const handleBudgetSubmit = () => {
+    const value = parseFloat(budgetInput) || 0;
+    setBudget(value);
+    setIsEditingBudget(false);
+    onBudgetChange?.(value);
+  };
+
+  const handleBudgetKeyPress = (e: React.KeyboardEvent) => {
+    if (e.key === 'Enter') {
+      handleBudgetSubmit();
+    }
+    if (e.key === 'Escape') {
+      setIsEditingBudget(false);
+      setBudgetInput(budget?.toString() || '0');
+    }
+  };
+
+  const handleEditBudget = () => {
+    setIsEditingBudget(true);
+    setBudgetInput(budget?.toString() || '0');
+  };
+
+  const handleCopy = (value: string) => {
+    navigator.clipboard.writeText(value);
+  };
+
+  const formatCurrency = (amount: number) => {
+    return new Intl.NumberFormat('en-US', {
+      minimumFractionDigits: 0,
+      maximumFractionDigits: 0,
+    }).format(amount);
+  };
+
+  const displayTotal = isCreditsMode ? total / 10 : total;
+  const displayBudget = budget && isCreditsMode ? budget / 10 : budget;
+  const difference = budget ? budget - total : 0;
+  const displayDifference = isCreditsMode ? difference / 10 : difference;
+
+  return (
+    <div className="flex flex-col gap-3 w-full max-w-xs">
+      {/* Budget Row */}
+      <div className="flex items-center gap-2">
+        {!isEditingBudget && budget === null ? (
+          <button
+            onClick={handleSetBudget}
+            className="px-4 py-2 bg-orange-500 text-white rounded-md hover:bg-orange-600 transition-colors font-medium"
+          >
+            Set Budget
+          </button>
+        ) : (
+          <>
+            <div className="flex-1 relative">
+              {isEditingBudget ? (
+                <input
+                  type="number"
+                  value={budgetInput}
+                  onChange={(e) => setBudgetInput(e.target.value)}
+                  onBlur={handleBudgetSubmit}
+                  onKeyDown={handleBudgetKeyPress}
+                  className="w-full px-3 py-2 border-2 border-orange-500 rounded-md focus:outline-none focus:border-orange-600"
+                  placeholder="Enter budget"
+                  autoFocus
+                />
+              ) : (
+                <div className="px-3 py-2 bg-white border-2 border-orange-500 rounded-md font-medium">
+                  {displayBudget ? formatCurrency(displayBudget) : '0'}
+                  <span className="text-xs text-gray-500 ml-1">BUDGET</span>
+                </div>
+              )}
+            </div>
+            
+            {!isEditingBudget && budget !== null && (
+              <>
+                <button
+                  onClick={() => handleCopy(budget.toString())}
+                  className="p-2 text-gray-600 hover:text-gray-800 transition-colors"
+                  title="Copy budget"
+                >
+                  <Copy className="w-4 h-4" />
+                </button>
+                <button
+                  onClick={handleEditBudget}
+                  className="p-2 text-gray-600 hover:text-gray-800 transition-colors"
+                  title="Edit budget"
+                >
+                  <Edit className="w-4 h-4" />
+                </button>
+              </>
+            )}
+          </>
+        )}
+      </div>
+
+      {/* Total Row */}
+      <div className="flex items-center gap-2">
+        <div className="flex-1 relative">
+          <div className="px-3 py-2 bg-white border-2 border-orange-500 rounded-md font-medium">
+            {formatCurrency(displayTotal)}
+            <span className="text-xs text-gray-500 ml-1">TOTAL</span>
+          </div>
+        </div>
+        
+        <button
+          onClick={() => handleCopy(total.toString())}
+          className="p-2 text-gray-600 hover:text-gray-800 transition-colors"
+          title="Copy total"
+        >
+          <Copy className="w-4 h-4" />
+        </button>
+
+        {/* Currency Toggle */}
+        <div className="relative group">
+          <button
+            onClick={() => setIsCreditsMode(!isCreditsMode)}
+            className="flex items-center bg-white border-2 border-orange-500 rounded-md overflow-hidden hover:bg-gray-50 transition-colors"
+            title="Toggle between USD and Credits"
+          >
+            <div className={`px-3 py-2 text-sm font-medium transition-colors ${
+              !isCreditsMode ? 'bg-orange-500 text-white' : 'text-gray-700'
+            }`}>
+              {isCreditsMode ? 'TUs' : '$USD'}
+            </div>
+            <div className={`px-3 py-2 text-sm font-medium transition-colors ${
+              isCreditsMode ? 'bg-orange-500 text-white' : 'text-gray-700'
+            }`}>
+              {isCreditsMode ? '$USD' : 'TUs'}
+            </div>
+          </button>
+          
+          {/* Tooltip */}
+          <div className="absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 px-2 py-1 bg-gray-800 text-white text-xs rounded opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none whitespace-nowrap">
+            Credits / Training Units
+          </div>
+        </div>
+      </div>
+
+      {/* Difference Row (only shown when budget is set) */}
+      {budget !== null && (
+        <div className="flex items-center gap-2">
+          <div className="flex-1 relative">
+            <div className={`px-3 py-2 bg-white border-2 rounded-md font-medium ${
+              difference >= 0 ? 'border-green-500' : 'border-red-500'
+            }`}>
+              {difference >= 0 ? '' : '-'}${formatCurrency(Math.abs(displayDifference))}
+              <span className="text-xs text-gray-500 ml-1">DIFF</span>
+            </div>
+          </div>
+          
+          <button
+            onClick={() => handleCopy(difference.toString())}
+            className="p-2 text-gray-600 hover:text-gray-800 transition-colors"
+            title="Copy difference"
+          >
+            <Copy className="w-4 h-4" />
+          </button>
+          
+          {/* Spacer to align with toggle above */}
+          <div className="w-[88px]"></div>
+        </div>
+      )}
+    </div>
+  );
+};
+
+export default Calculator;

@@ -1,0 +1,49 @@
+import React from "react";
+import TeamTable from "./TeamTable";
+import { Course, Person } from "@/types/types";
+import { DEFAULT_TEAM_NAMES } from "@/utils/constants";
+
+interface PlanCoreProps {
+  data: Course[];
+  teamMembers: Person[];
+  selections: Record<string, boolean>;
+  onTeamMembersChange: (teamMembers: Person[]) => void;
+  onSelectionsChange: (selections: Record<string, boolean>) => void;
+  onScroll?: (scrollTop: number) => void;
+}
+
+const PlanCore: React.FC<PlanCoreProps> = ({
+  data,
+  teamMembers,
+  selections,
+  onTeamMembersChange,
+  onSelectionsChange,
+  onScroll,
+}) => {
+  // Handle team and selection changes from TeamTable
+  const handleTeamChange = (
+    newTeamMembers: Person[],
+    newSelections: Record<string, boolean>
+  ) => {
+    onTeamMembersChange(newTeamMembers);
+    onSelectionsChange(newSelections);
+  };
+
+  return (
+    <div id="plan-core" className="h-full">
+      <TeamTable
+        data={data}
+        teamMembers={teamMembers}
+        selections={selections}
+        onTeamChange={handleTeamChange}
+        onScroll={onScroll}
+        maxMembers={20}
+        defaultMemberNames={DEFAULT_TEAM_NAMES}
+      />
+    </div>
+  );
+};
+
+PlanCore.displayName = "PlanCore";
+
+export default PlanCore;

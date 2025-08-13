@@ -1,0 +1,173 @@
+/**
+ * Feature: Training Plan Footer Status Display
+ *
+ * As a training planner
+ * I want to see accurate statistics in the footer
+ * So that I can track my plan's scope and progress in real-time
+ */
+
+import {
+  PLANNER_CONSTANTS,
+  getCurrentFooterStats,
+  waitForFooterUpdate,
+  getTeamMemberCount,
+  addMultipleTeamMembers,
+} from "../../support/plannerUtils";
+
+const SCENARIO_CONFIG = {
+  TEAM_COUNT: 3,
+  SELECTION_COUNT: 3,
+  BASELINE_STATS: {
+    selections: 0,
+    teams: 1,
+    teamMembers: 1,
+    catalogs: 1,
+  },
+};
+
+describe("Feature: Training Plan Footer Status Display", () => {
+  beforeEach("Setup planner for footer testing", () => {
+    cy.visitPlannerAndWait();
+    cy.get("#table-footer").should("be.visible");
+  });
+
+  it("Scenario: Initial footer state displays correct baseline stats", () => {
+    // Then the footer should show initial state
+    cy.verifyFooterStats(SCENARIO_CONFIG.BASELINE_STATS);
+
+    // And verify baseline pluralization (all singular)
+    cy.verifyFooterContains("1 team");
+    cy.verifyFooterContains("1 team member");
+    cy.verifyFooterContains("1 catalog");
+
+    // And no selections should be shown initially
+    cy.get("#table-footer").should("not.contain", "selections");
+  });
+
+  it("Scenario: Footer updates when team members are added", () => {
+    // Given I capture the initial team member count
+    getTeamMemberCount().then((initialCount) => {
+      expect(initialCount).to.equal(1);
+
+      // When I add team members
+      const membersToAdd = SCENARIO_CONFIG.TEAM_COUNT - 1;
+
+      for (let i = 0; i < membersToAdd; i++) {
+        cy.addTeamMember();
+        waitForFooterUpdate(`team member ${i + 2} added`);
+
+        // Then the footer should reflect the new team member count
+        const expectedCount = initialCount + i + 1;
+        cy.verifyFooterStats({
+          teamMembers: expectedCount,
+          teams: 1,
+        });
+      }
+
+      // And the final state should show correct pluralization
+      cy.verifyFooterContains(`${SCENARIO_CONFIG.TEAM_COUNT} team members`);
+      cy.verifyFooterPluralization();
+    });
+  });
+
+  it("Scenario: Footer updates when team members are removed", () => {
+    // Given I have multiple team members
+    addMultipleTeamMembers(SCENARIO_CONFIG.TEAM_COUNT);
+    cy.verifyFooterStats({ teamMembers: SCENARIO_CONFIG.TEAM_COUNT });
+
+    // When I remove the last added member by name
+    cy.removeTeamMember(PLANNER_CONSTANTS.DEFAULT_TEAM_NAMES[2]);
+    waitForFooterUpdate("team member removed");
+
+    // Then the footer should show 2 team members
+    cy.verifyFooterStats({ teamMembers: 2 });
+
+    // When I remove the second member by name
+    cy.removeTeamMember(PLANNER_CONSTANTS.DEFAULT_TEAM_NAMES[1]);
+    waitForFooterUpdate("second team member removed");
+
+    // Then the footer should return to singular form
+    cy.verifyFooterStats({ teamMembers: 1 });
+    cy.verifyFooterContains("1 team member");
+    cy.verifyFooterPluralization();
+  });
+
+  it("Scenario: Footer tracks course selections accurately", () => {
+    // Given I start with no selections
+    let expectedSelections = 0;
+
+    // When I make course selections
+    for (let i = 1; i <= SCENARIO_CONFIG.SELECTION_COUNT; i++) {
+      cy.selectCourseForMember(i, PLANNER_CONSTANTS.FIRST_TEAM_MEMBER_COLUMN);
+      expectedSelections++;
+
+      // Then the footer should show updated selection count
+      cy.verifyFooterStats({ selections: expectedSelections });
+    }
+
+    // And verify correct pluralization based on selection count
+    if (expectedSelections === 1) {
+      cy.verifyFooterContains("1 selection");
+    } else {
+      cy.verifyFooterContains(`${expectedSelections} selections`);
+    }
+
+    cy.verifyFooterPluralization();
+  });
+
+  it("Scenario: Footer shows correct course counts", () => {
+    // Then the footer should show meaningful course count
+    cy.parseFooterStats().then((stats) => {
+      expect(stats.courses).to.be.greaterThan(
+        PLANNER_CONSTANTS.MIN_COURSES_REQUIRED,
+      );
+      cy.verifyFooterContains(`${stats.courses} courses`);
+
+      // And verify other baseline stats remain correct
+      cy.verifyFooterStats({
+        teams: 1,
+        teamMembers: 1,
+        catalogs: 1,
+      });
+    });
+  });
+
+  it("Scenario: Footer maintains accuracy during mixed operations", () => {
+    // Given I perform a sequence of different operations
+    getCurrentFooterStats().then((initialStats) => {
+      // When I add a team member
+      cy.addTeamMember();
+      cy.wait(PLANNER_CONSTANTS.TEAM_ACTION_WAIT);
+
+      // Then the footer should show 2 team members
+      cy.verifyFooterStats({ teamMembers: 2 });
+
+      // When I remove that team member by name
+      cy.removeTeamMember(PLANNER_CONSTANTS.DEFAULT_TEAM_NAMES[1]);
+
+      // Then the footer should return to original state
+      cy.verifyFooterStats({ teamMembers: 1 });
+
+      // And verify pluralization remains correct after operations
+      cy.verifyFooterPluralization();
+    });
+  });
+
+  it("Scenario: Footer pluralization edge cases", () => {
+    // Given I start with singular forms (baseline state)
+    cy.verifyFooterPluralization();
+
+    // When I add a team member to test plural forms
+    cy.addTeamMember();
+    cy.wait(PLANNER_CONSTANTS.TEAM_ACTION_WAIT);
+
+    // Then pluralization should be correct
+    cy.verifyFooterPluralization();
+
+    // When I return to singular by removing the member
+    cy.removeTeamMember(PLANNER_CONSTANTS.DEFAULT_TEAM_NAMES[1]);
+
+    // Then singular forms should be correct again
+    cy.verifyFooterPluralization();
+  });
+});

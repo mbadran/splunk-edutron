@@ -1,0 +1,22 @@
+import React from 'react';
+import { Plus } from 'lucide-react';
+
+interface TeamActionsProps {
+  onAddTeamMember: () => void;
+}
+
+const TeamActions = ({ onAddTeamMember }: TeamActionsProps) => {
+  return (
+    <th className="w-24 h-12 bg-orange-500 text-white font-semibold sticky top-0 z-10 border-none">
+      <button 
+        onClick={onAddTeamMember}
+        className="w-full h-full bg-transparent border-none text-white hover:bg-orange-600 transition-colors rounded flex items-center justify-center gap-1 font-semibold"
+        title="Add team member"
+      >
+        <Plus className="w-5 h-5" />
+      </button>
+    </th>
+  );
+};
+
+export default TeamActions;

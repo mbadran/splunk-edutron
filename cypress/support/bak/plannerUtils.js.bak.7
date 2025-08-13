@@ -1,0 +1,254 @@
+/**
+ * Cypress Utilities for Planner Tests
+ */
+
+// Essential constants only
+const PLANNER_CONSTANTS = {
+  SELECTION_WAIT: 250,
+  CALCULATOR_WAIT: 1000,
+  TEAM_ACTION_WAIT: 500,
+  FIRST_TEAM_MEMBER_COLUMN: 10,
+  PRICE_COLUMN: 5,
+  MAX_TEAM_MEMBERS: 20,
+};
+
+// Extract price from table row - SIMPLIFIED: One return path, proper chaining
+const extractPriceFromRow = (rowIndex) => {
+  return cy
+    .get(`#table-row-${rowIndex}`)
+    .find(`[aria-colindex="${PLANNER_CONSTANTS.PRICE_COLUMN}"]`)
+    .invoke("text")
+    .then((priceText) => {
+      const cleanText = priceText.trim();
+
+      // Handle "Free" case
+      if (cleanText === "Free" || cleanText === "") {
+        return cy.then(() => 0); // Chain properly with cy.then()
+      }
+
+      // Handle numeric case
+      const numericPrice = parseFloat(cleanText.replace(/[^0-9.]/g, ""));
+      const finalPrice = isNaN(numericPrice) ? 0 : numericPrice;
+      return cy.then(() => finalPrice); // Chain properly with cy.then()
+    });
+};
+
+// Select course for team member
+const selectCourseForMember = (
+  rowIndex,
+  memberColumnIndex = PLANNER_CONSTANTS.FIRST_TEAM_MEMBER_COLUMN,
+) => {
+  cy.get(`#table-row-${rowIndex}`).within(() => {
+    cy.get(`[aria-colindex="${memberColumnIndex}"]`).within(() => {
+      cy.get('[role="button"]').click();
+    });
+  });
+  cy.wait(PLANNER_CONSTANTS.SELECTION_WAIT);
+};
+
+// Verify selection state
+const verifySelectionState = (
+  rowIndex,
+  shouldBeSelected,
+  memberColumnIndex = PLANNER_CONSTANTS.FIRST_TEAM_MEMBER_COLUMN,
+) => {
+  cy.get(`#table-row-${rowIndex}`).within(() => {
+    cy.get(`[aria-colindex="${memberColumnIndex}"]`).within(() => {
+      if (shouldBeSelected) {
+        cy.get(".bg-emerald-400, .plan-cell-selected").should("exist");
+      } else {
+        cy.get(".border-gray-300, .plan-cell-unselected").should("exist");
+      }
+    });
+  });
+};
+
+// Wait for planner ready
+const waitForPlannerReady = () => {
+  cy.title().should("contain", "Planner");
+
+  cy.get("#planner").should("be.visible");
+  cy.get("#monotable").should("be.visible");
+  cy.get("#calculator").should("be.visible");
+
+  cy.get("body").then(($body) => {
+    if ($body.find("#table-loading-state").length > 0) {
+      cy.get("#table-loading-state").should("not.be.visible");
+    }
+  });
+};
+
+// Verify calculator total
+const verifyCalculatorTotal = (expectedTotal) => {
+  cy.get("#calculator").within(() => {
+    cy.get("#total-value").should("contain", expectedTotal.toString());
+  });
+};
+
+// TEAM MEMBER UTILITIES
+
+// Add team member via UserPlus button - FULLY FIXED: No mixing
+const addTeamMember = () => {
+  return cy.log("🔍 Attempting to add team member...").then(() => {
+    // First verify the button exists and is clickable
+    return cy.get("#plan-actions").should("be.visible");
+  }).then(() => {
+    return cy.get("#plan-actions").within(() => {
+      cy.get('button[title="Add Team Member"]').should("be.visible");
+      cy.get('button[title="Add Team Member"]').should("not.be.disabled");
+      
+      return cy.log("📱 Clicking Add Team Member button").then(() => {
+        cy.get('button[title="Add Team Member"]').click();
+      });
+    });
+  }).then(() => {
+    cy.wait(PLANNER_CONSTANTS.TEAM_ACTION_WAIT);
+    return cy.log("⏱️ Waited for team action to complete");
+  });
+};
+
+// Remove team member via Trash2 button with confirmation handling
+const removeTeamMember = (memberName) => {
+  // Find the team member in the table header and click delete button
+  cy.get('#monotable').within(() => {
+    cy.contains(memberName).parent().within(() => {
+      cy.get('button[aria-label*="Remove"], button[title*="Remove"]').click();
+    });
+  });
+  
+  // Handle confirmation modal
+  cy.get('[role="dialog"]').should("be.visible");
+  cy.get('[role="dialog"]').within(() => {
+    cy.contains("button", "Confirm").click();
+  });
+  
+  cy.wait(PLANNER_CONSTANTS.TEAM_ACTION_WAIT);
+};
+
+// Update team member name via click-to-edit
+const updateTeamMemberName = (currentName, newName) => {
+  // Find and click the team member name to edit
+  cy.get('#monotable').within(() => {
+    cy.contains(currentName).click();
+  });
+  
+  // Handle the prompt dialog (Note: Cypress can't handle native prompts directly)
+  cy.window().then((win) => {
+    cy.stub(win, 'prompt').returns(newName);
+  });
+  
+  cy.wait(PLANNER_CONSTANTS.TEAM_ACTION_WAIT);
+};
+
+// Get current team member count - SIMPLE & RELIABLE: Use team-member-header class
+const getTeamMemberCount = () => {
+  return cy.get('#monotable').then(() => {
+    
+    return cy.log('🔍 Counting team members using team-member-header class').then(() => {
+      
+      // PRIMARY METHOD: Count team-member-header elements
+      return cy.get('.team-member-header').then(($headers) => {
+        const headerCount = $headers.length;
+        
+        if (headerCount > 0) {
+          // Success! We found team member headers
+          return cy.log(`📊 Found ${headerCount} team-member-header elements`).then(() => headerCount);
+        } else {
+          // Fallback: team-member-header class not implemented yet
+          return cy.log('⚠️ No team-member-header elements found, using fallback methods').then(() => {
+            
+            // FALLBACK 1: Count selection columns in first data row
+            return cy.get('[id^="table-row-1"]').first().then(($row) => {
+              if ($row.length > 0) {
+                const selectionButtons = $row.find('[role="button"], .plan-cell-selected, .plan-cell-unselected');
+                const selectionCount = selectionButtons.length;
+                
+                if (selectionCount > 0) {
+                  return cy.log(`📊 Fallback: Found ${selectionCount} selection columns`).then(() => selectionCount);
+                }
+              }
+              
+              // FALLBACK 2: Count by name matching (least reliable)
+              return cy.get('#monotable').then(($table) => {
+                const tableText = $table.text();
+                let nameCount = 0;
+                if (tableText.includes("Richard Hendricks")) nameCount++;
+                for (let i = 2; i <= 10; i++) {
+                  if (tableText.includes(`Team Member ${i}`)) nameCount++;
+                }
+                
+                const finalCount = Math.max(nameCount, 1); // Minimum 1
+                return cy.log(`📊 Final fallback: Name-based count = ${finalCount}`).then(() => finalCount);
+              });
+            });
+          });
+        }
+      });
+    });
+  });
+};
+
+// Verify team member exists in table - UPDATED: Use team-member-header class
+const verifyTeamMemberExists = (memberName) => {
+  // Try the new team-member-header class first
+  cy.get('body').then(($body) => {
+    if ($body.find('.team-member-header').length > 0) {
+      // New class exists, use it
+      cy.get('.team-member-header').should("contain", memberName);
+    } else {
+      // Fallback to old method
+      cy.get('#monotable').should("contain", memberName);
+    }
+  });
+};
+
+// Verify team member does not exist in table - UPDATED: Use team-member-header class  
+const verifyTeamMemberNotExists = (memberName) => {
+  // Try the new team-member-header class first
+  cy.get('body').then(($body) => {
+    if ($body.find('.team-member-header').length > 0) {
+      // New class exists, use it
+      cy.get('.team-member-header').should("not.contain", memberName);
+    } else {
+      // Fallback to old method
+      cy.get('#monotable').should("not.contain", memberName);
+    }
+  });
+};
+
+// Get team member column index by name - FULLY FIXED: Consistent pattern
+const getTeamMemberColumnIndex = (memberName) => {
+  // Calculate column index based on member order (all synchronous logic)
+  if (memberName === "Richard Hendricks") {
+    return cy.then(() => PLANNER_CONSTANTS.FIRST_TEAM_MEMBER_COLUMN);
+  }
+  
+  // Extract number from "Team Member X" pattern
+  const match = memberName.match(/Team Member (\d+)/);
+  if (match) {
+    const memberNumber = parseInt(match[1]);
+    const columnIndex = PLANNER_CONSTANTS.FIRST_TEAM_MEMBER_COLUMN + memberNumber - 1;
+    return cy.then(() => columnIndex);
+  }
+  
+  // Fallback to first team member column
+  return cy.then(() => PLANNER_CONSTANTS.FIRST_TEAM_MEMBER_COLUMN);
+};
+
+// Export only what we need
+export {
+  PLANNER_CONSTANTS,
+  extractPriceFromRow,
+  selectCourseForMember,
+  verifySelectionState,
+  waitForPlannerReady,
+  verifyCalculatorTotal,
+  // Team member utilities
+  addTeamMember,
+  removeTeamMember,
+  updateTeamMemberName,
+  getTeamMemberCount,
+  verifyTeamMemberExists,
+  verifyTeamMemberNotExists,
+  getTeamMemberColumnIndex,
+};

@@ -1,0 +1,196 @@
+import React from "react";
+import { useAtom } from "jotai";
+import { atom } from "jotai";
+import { atomWithStorage } from "jotai/utils";
+import Header from "./common/Header";
+import PlanScroller from "./PlanScroller";
+import { Person } from "@/types/types";
+import {
+  DEFAULT_PLAN_TITLE,
+  DEFAULT_TEAM_NAMES,
+  DEFAULT_CATALOG,
+} from "@/utils/constants";
+import { catalogsAtom } from "@/atoms/globalAtoms";
+
+// Global Jotai atoms for plan state
+export const planTitleAtom = atomWithStorage("plan-title", DEFAULT_PLAN_TITLE);
+export const planTeamMembersAtom = atomWithStorage(
+  "plan-team-members",
+  [] as Person[],
+);
+export const planSelectionsAtom = atomWithStorage(
+  "plan-selections",
+  {} as Record<string, boolean>,
+);
+export const planBudgetAtom = atomWithStorage(
+  "plan-budget",
+  null as number | null,
+);
+
+// Derived atom to get courses from the default catalog
+export const planCoursesAtom = atom((get) => {
+  const catalogs = get(catalogsAtom);
+  const defaultCatalog = catalogs.find(
+    (catalog) => catalog.slug === DEFAULT_CATALOG,
+  );
+  return defaultCatalog?.courses || [];
+});
+
+// Derived atom for total calculation
+export const planTotalAtom = atom((get) => {
+  const courses = get(planCoursesAtom);
+  const teamMembers = get(planTeamMembersAtom);
+  const selections = get(planSelectionsAtom);
+
+  return courses.reduce((acc, course) => {
+    const courseSelections = teamMembers.reduce((memberAcc, member) => {
+      const key = `${course.id}-${member.id}`;
+      return memberAcc + (selections[key] ? course.Price || 0 : 0);
+    }, 0);
+    return acc + courseSelections;
+  }, 0);
+});
+
+// Undo/Redo state atoms
+export const planHistoryAtom = atomWithStorage("plan-history", [] as any[]);
+export const planHistoryIndexAtom = atomWithStorage("plan-history-index", -1);
+
+interface PlannerProps {
+  onBackToHome: () => void;
+}
+
+const Planner: React.FC<PlannerProps> = ({ onBackToHome }) => {
+  // Jotai state management
+  const [planTitle, setPlanTitle] = useAtom(planTitleAtom);
+  const [teamMembers, setTeamMembers] = useAtom(planTeamMembersAtom);
+  const [selections, setSelections] = useAtom(planSelectionsAtom);
+  const [courses] = useAtom(planCoursesAtom);
+  const [budget, setBudget] = useAtom(planBudgetAtom);
+  const [total] = useAtom(planTotalAtom);
+  const [history, setHistory] = useAtom(planHistoryAtom);
+  const [historyIndex, setHistoryIndex] = useAtom(planHistoryIndexAtom);
+
+  // Initialize with default team member if empty
+  React.useEffect(() => {
+    if (teamMembers.length === 0) {
+      const defaultMember: Person = {
+        id: `member-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+        name: DEFAULT_TEAM_NAMES[0],
+        email: "",
+        role: "",
+      };
+      setTeamMembers([defaultMember]);
+    }
+  }, [teamMembers.length, setTeamMembers]);
+
+  // Handler functions
+  const handleUpdateTitle = (newTitle: string) => {
+    setPlanTitle(newTitle);
+    saveToHistory();
+  };
+
+  const saveToHistory = () => {
+    const currentState = {
+      title: planTitle,
+      teamMembers,
+      selections,
+      budget,
+      timestamp: Date.now(),
+    };
+
+    const newHistory = history.slice(0, historyIndex + 1);
+    newHistory.push(currentState);
+
+    // Keep only last 50 states
+    if (newHistory.length > 50) {
+      newHistory.shift();
+    } else {
+      setHistoryIndex(historyIndex + 1);
+    }
+
+    setHistory(newHistory);
+  };
+
+  const handleUndo = () => {
+    if (historyIndex > 0) {
+      const previousState = history[historyIndex - 1];
+      setPlanTitle(previousState.title);
+      setTeamMembers(previousState.teamMembers);
+      setSelections(previousState.selections);
+      setBudget(previousState.budget);
+      setHistoryIndex(historyIndex - 1);
+    }
+  };
+
+  const handleRedo = () => {
+    if (historyIndex < history.length - 1) {
+      const nextState = history[historyIndex + 1];
+      setPlanTitle(nextState.title);
+      setTeamMembers(nextState.teamMembers);
+      setSelections(nextState.selections);
+      setBudget(nextState.budget);
+      setHistoryIndex(historyIndex + 1);
+    }
+  };
+
+  const handleDownload = () => {
+    const planData = {
+      title: planTitle,
+      teamMembers,
+      selections,
+      courses,
+      budget,
+      total,
+      exportDate: new Date().toISOString(),
+      version: "1.0",
+    };
+
+    const dataStr = JSON.stringify(planData, null, 2);
+    const dataUri =
+      "data:application/json;charset=utf-8," + encodeURIComponent(dataStr);
+
+    const exportFileDefaultName = `${planTitle.replace(/[^a-z0-9]/gi, "_").toLowerCase()}_plan.json`;
+
+    const linkElement = document.createElement("a");
+    linkElement.setAttribute("href", dataUri);
+    linkElement.setAttribute("download", exportFileDefaultName);
+    linkElement.click();
+  };
+
+  const handleBudgetChange = (newBudget: number | null) => {
+    setBudget(newBudget);
+  };
+
+  // Navigation handler
+  const handleNavigate = (route: string) => {
+    console.log("Navigate to:", route);
+    // TODO: Implement navigation logic when routing is added
+  };
+
+  return (
+    <div id="planner" className="min-h-screen bg-gray-50 flex flex-col">
+      <Header
+        onBackToHome={onBackToHome}
+        pageTitle={planTitle}
+        onUpdateTitle={handleUpdateTitle}
+        onUndo={handleUndo}
+        onRedo={handleRedo}
+        onDownload={handleDownload}
+        canUndo={historyIndex > 0}
+        canRedo={historyIndex < history.length - 1}
+        total={total}
+        onBudgetChange={handleBudgetChange}
+        currentRoute="/planner"
+        onNavigate={handleNavigate}
+      />
+
+      <PlanScroller
+        courses={courses}
+        teamMembers={teamMembers}
+        selections={selections}
+      />
+    </div>
+  );
+};
+
+export default Planner;

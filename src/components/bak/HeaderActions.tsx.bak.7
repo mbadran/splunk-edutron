@@ -1,0 +1,92 @@
+import React from 'react';
+import { Undo, Redo, Download, FileText, Plus, Upload } from 'lucide-react';
+
+interface HeaderActionsProps {
+  onUndo: () => void;
+  onRedo: () => void;
+  onDownload: () => void;
+  canUndo: boolean;
+  canRedo: boolean;
+}
+
+const HeaderActions = ({
+  onUndo,
+  onRedo,
+  onDownload,
+  canUndo,
+  canRedo
+}: HeaderActionsProps) => {
+  const handleQuote = () => {
+    alert('Coming soon!');
+  };
+
+  const handleNew = () => {
+    alert('Coming soon!');
+  };
+
+  const handleUpload = () => {
+    alert('Coming soon!');
+  };
+
+  return (
+    <div className="flex items-center justify-center gap-3">
+      <button
+        onClick={onUndo}
+        disabled={!canUndo}
+        title="Undo"
+        className="flex items-center justify-center p-2.5 bg-slate-300 text-slate-700 rounded-md hover:bg-slate-400 disabled:bg-gray-200 disabled:text-gray-400 disabled:cursor-not-allowed transition-colors"
+      >
+        <Undo className="w-3.5 h-3.5" />
+      </button>
+      
+      <button
+        onClick={onRedo}
+        disabled={!canRedo}
+        title="Redo"
+        className="flex items-center justify-center p-2.5 bg-slate-300 text-slate-700 rounded-md hover:bg-slate-400 disabled:bg-gray-200 disabled:text-gray-400 disabled:cursor-not-allowed transition-colors"
+      >
+        <Redo className="w-3.5 h-3.5" />
+      </button>
+
+      {/* White space divider */}
+      <div className="w-6"></div>
+
+      <button
+        onClick={onDownload}
+        title="Download Plan"
+        className="flex items-center justify-center p-2.5 bg-slate-300 text-slate-700 rounded-md hover:bg-slate-400 transition-colors"
+      >
+        <Download className="w-3.5 h-3.5" />
+      </button>
+
+      <button
+        onClick={handleQuote}
+        title="Generate Sales Quote"
+        className="flex items-center justify-center p-2.5 bg-slate-300 text-slate-700 rounded-md hover:bg-slate-400 transition-colors"
+      >
+        <FileText className="w-3.5 h-3.5" />
+      </button>
+
+      {/* White space divider */}
+      <div className="w-6"></div>
+
+      <button
+        onClick={handleNew}
+        title="New Plan"
+        className="flex items-center justify-center p-2.5 bg-slate-300 text-slate-700 rounded-md hover:bg-slate-400 transition-colors"
+      >
+        <Plus className="w-3.5 h-3.5" />
+      </button>
+
+      <button
+        onClick={handleUpload}
+        title="Upload Plan"
+        className="flex items-center justify-center p-2.5 bg-slate-300 text-slate-700 rounded-md hover:bg-slate-400 transition-colors"
+      >
+        <Upload className="w-3.5 h-3.5" />
+      </button>
+    </div>
+  );
+};
+
+export default HeaderActions;

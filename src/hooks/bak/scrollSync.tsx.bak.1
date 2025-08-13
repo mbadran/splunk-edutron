@@ -1,0 +1,46 @@
+import { useState, useRef } from "react";
+
+export const useScrollSync = () => {
+  const [scrollTop, setScrollTop] = useState(0);
+  const isScrollingSyncRef = useRef(false);
+  const catalogTableRef = useRef<any>(null);
+  const teamTableRef = useRef<any>(null);
+
+  const handleCatalogScroll = (scrollOffset: number) => {
+    if (isScrollingSyncRef.current) return;
+
+    setScrollTop(scrollOffset);
+
+    isScrollingSyncRef.current = true;
+    if (teamTableRef.current) {
+      teamTableRef.current.scrollToOffset(scrollOffset);
+    }
+
+    setTimeout(() => {
+      isScrollingSyncRef.current = false;
+    }, 10);
+  };
+
+  const handleTeamScroll = (scrollOffset: number) => {
+    if (isScrollingSyncRef.current) return;
+
+    setScrollTop(scrollOffset);
+
+    isScrollingSyncRef.current = true;
+    if (catalogTableRef.current) {
+      catalogTableRef.current.scrollToOffset(scrollOffset);
+    }
+
+    setTimeout(() => {
+      isScrollingSyncRef.current = false;
+    }, 10);
+  };
+
+  return {
+    scrollTop,
+    catalogTableRef,
+    teamTableRef,
+    handleCatalogScroll,
+    handleTeamScroll,
+  };
+};

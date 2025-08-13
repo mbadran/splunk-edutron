@@ -1,0 +1,590 @@
+import React, { useState, useEffect, useRef } from "react";
+import Header from "./Header";
+import Catalog from "./Catalog";
+import Team from "./Team";
+import Footer from "./Footer";
+import WelcomeScreen from "./WelcomeScreen";
+
+type Course = Parameters<Parameters<typeof Catalog>[0]["onCoursesLoad"]>[1][0];
+
+interface ConfirmationModalProps {
+  isOpen: boolean;
+  onClose: () => void;
+  onConfirm: () => void;
+  title: string;
+  message: string;
+}
+
+const ConfirmationModal: React.FC<ConfirmationModalProps> = ({
+  isOpen,
+  onClose,
+  onConfirm,
+  title,
+  message,
+}) => {
+  if (!isOpen) return null;
+
+  return (
+    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+      <div className="bg-white rounded-2xl p-8 max-w-md mx-4 shadow-2xl">
+        <h3 className="text-xl font-bold text-gray-800 mb-4">{title}</h3>
+        <p className="text-gray-600 mb-6">{message}</p>
+        <div className="flex gap-4">
+          <button
+            onClick={onClose}
+            className="flex-1 bg-gray-200 text-gray-800 py-2 px-4 rounded-lg hover:bg-gray-300 transition-colors font-bold"
+          >
+            Cancel
+          </button>
+          <button
+            onClick={onConfirm}
+            className="flex-1 bg-gradient-to-r from-orange-500 to-pink-500 text-white py-2 px-4 rounded-lg hover:from-orange-600 hover:to-pink-600 transition-colors font-bold"
+          >
+            Continue
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+interface PlanScrollerProps {
+  courseCount: number;
+  courses: Course[];
+  teamMembers: string[];
+  selections: Record<string, boolean>;
+  onCoursesLoad: (count: number, courses: Course[]) => void;
+  onTeamMembersChange: (members: string[]) => void;
+  onSelectionsChange: (selections: Record<string, boolean>) => void;
+}
+
+const PlanScroller: React.FC<PlanScrollerProps> = ({
+  courseCount,
+  courses,
+  teamMembers,
+  selections,
+  onCoursesLoad,
+  onTeamMembersChange,
+  onSelectionsChange,
+}) => {
+  const [isResizing, setIsResizing] = useState(false);
+  const [leftWidth, setLeftWidth] = useState(50);
+  const [scrollTop, setScrollTop] = useState(0);
+  const isScrollingSyncRef = useRef(false);
+  const catalogTableRef = useRef<any>(null);
+  const teamTableRef = useRef<any>(null);
+
+  useEffect(() => {
+    const handleMouseMove = (e: MouseEvent) => {
+      if (!isResizing) return;
+
+      const containerRect = document
+        .querySelector(".training-plan-container")
+        ?.getBoundingClientRect();
+      if (!containerRect) return;
+
+      const newLeftWidth =
+        ((e.clientX - containerRect.left) / containerRect.width) * 100;
+
+      if (newLeftWidth >= 30 && newLeftWidth <= 70) {
+        setLeftWidth(newLeftWidth);
+      }
+    };
+
+    const handleMouseUp = () => {
+      setIsResizing(false);
+    };
+
+    if (isResizing) {
+      document.addEventListener("mousemove", handleMouseMove);
+      document.addEventListener("mouseup", handleMouseUp);
+    }
+
+    return () => {
+      document.removeEventListener("mousemove", handleMouseMove);
+      document.removeEventListener("mouseup", handleMouseUp);
+    };
+  }, [isResizing]);
+
+  const handleMouseDown = () => {
+    setIsResizing(true);
+  };
+
+  const handleCatalogScroll = (scrollOffset: number) => {
+    if (isScrollingSyncRef.current) return;
+
+    setScrollTop(scrollOffset);
+
+    isScrollingSyncRef.current = true;
+    if (teamTableRef.current) {
+      teamTableRef.current.scrollToOffset(scrollOffset);
+    }
+
+    setTimeout(() => {
+      isScrollingSyncRef.current = false;
+    }, 10);
+  };
+
+  const handleTeamScroll = (scrollOffset: number) => {
+    if (isScrollingSyncRef.current) return;
+
+    setScrollTop(scrollOffset);
+
+    isScrollingSyncRef.current = true;
+    if (catalogTableRef.current) {
+      catalogTableRef.current.scrollToOffset(scrollOffset);
+    }
+
+    setTimeout(() => {
+      isScrollingSyncRef.current = false;
+    }, 10);
+  };
+
+  const handleCoursesLoad = (count: number, courses: Course[]) => {
+    onCoursesLoad(count, courses);
+  };
+
+  const handleTeamChange = (members: string[]) => {
+    onTeamMembersChange(members);
+  };
+
+  const handleToggleSelection = (courseIndex: number, memberIndex: number) => {
+    const key = `${courseIndex}-${memberIndex}`;
+    const newSelections = {
+      ...selections,
+      [key]: !selections[key],
+    };
+    onSelectionsChange(newSelections);
+  };
+
+  const isSelected = (courseIndex: number, memberIndex: number) => {
+    const key = `${courseIndex}-${memberIndex}`;
+    return selections[key] || false;
+  };
+
+  return (
+    <div className="h-[70vh] training-plan-container flex relative">
+      <div
+        className="h-full overflow-hidden catalog-scroll-container"
+        style={{
+          width: `${leftWidth}%`,
+        }}
+      >
+        <div className="bg-white h-full">
+          <Catalog
+            ref={catalogTableRef}
+            onCoursesLoad={handleCoursesLoad}
+            onScroll={handleCatalogScroll}
+          />
+        </div>
+      </div>
+
+      <div
+        className="bg-gradient-to-b from-orange-500 to-pink-500 cursor-col-resize hover:from-orange-600 hover:to-pink-600 transition-colors duration-150 group relative flex-shrink-0 flex items-center justify-center hover:cursor-grab active:cursor-grabbing"
+        style={{ width: "10px" }}
+        onMouseDown={handleMouseDown}
+      >
+        <div
+          className="bg-orange-500 rounded-md shadow-lg group-hover:bg-orange-600 transition-colors duration-150 flex flex-col items-center justify-center z-10 border border-orange-400 gap-1"
+          style={{ width: "14px", height: "32px" }}
+        >
+          <div className="w-1 h-1 bg-amber-800 rounded-full"></div>
+          <div className="w-1 h-1 bg-amber-800 rounded-full"></div>
+          <div className="w-1 h-1 bg-amber-800 rounded-full"></div>
+        </div>
+      </div>
+
+      <div
+        className="h-full overflow-hidden team-scroll-container"
+        style={{
+          width: `${100 - leftWidth}%`,
+        }}
+      >
+        <div className="bg-white h-full">
+          <Team
+            ref={teamTableRef}
+            courses={courses}
+            courseCount={courseCount}
+            teamMembers={teamMembers}
+            selections={selections}
+            onTeamMembersChange={handleTeamChange}
+            onToggleSelection={handleToggleSelection}
+            isSelected={isSelected}
+            onScroll={handleTeamScroll}
+          />
+        </div>
+      </div>
+    </div>
+  );
+};
+
+interface PlanEditorProps {
+  onBackToWelcome: () => void;
+  hasExistingPlan: boolean;
+}
+
+const PlanEditor: React.FC<PlanEditorProps> = ({
+  onBackToWelcome,
+  hasExistingPlan,
+}) => {
+  const DEFAULT_PLAN_TITLE = "Pied Piper / Splunk Training Plan";
+  const CAST_NAMES = [
+    "Richard Hendricks",
+    "Erlich Bachman",
+    "Dinesh Chugtai",
+    "Bertram Gilfoyle",
+    "Jared Dunn",
+    "Monica Hall",
+    "Gavin Belson",
+    "Nelson Bighetti",
+    "Russ Hanneman",
+    "Peter Gregory",
+    "Laurie Bream",
+    "Ed Chen",
+    "Hoover Chan",
+    "Don Bang",
+    "Carla Walton",
+    "Dan Melcher",
+    "Fiona Wallace",
+    "John Stafford",
+    "Kara Swisher",
+    "Maximo Reyes",
+  ];
+
+  const [planTitle, setPlanTitle] = useState(DEFAULT_PLAN_TITLE);
+  const [courseCount, setCourseCount] = useState(0);
+  const [courses, setCourses] = useState<Course[]>([]);
+  const [teamMembers, setTeamMembers] = useState([CAST_NAMES[0]]);
+  const [selections, setSelections] = useState<Record<string, boolean>>({});
+  const [budget, setBudget] = useState<number | null>(null);
+  const [hasChanges, setHasChanges] = useState(false);
+  const [showConfirmation, setShowConfirmation] = useState(false);
+  const [pendingAction, setPendingAction] = useState<(() => void) | null>(null);
+  const [history, setHistory] = useState<
+    Array<{
+      title: string;
+      courseCount: number;
+      teamMembers: string[];
+      selections: Record<string, boolean>;
+    }>
+  >([
+    {
+      title: DEFAULT_PLAN_TITLE,
+      courseCount: 0,
+      teamMembers: [CAST_NAMES[0]],
+      selections: {},
+    },
+  ]);
+  const [historyIndex, setHistoryIndex] = useState(0);
+
+  const initialState = {
+    title: DEFAULT_PLAN_TITLE,
+    courseCount: 0,
+    teamMembers: [CAST_NAMES[0]],
+    selections: {} as Record<string, boolean>,
+  };
+
+  // Calculate total cost based on selections
+  const calculateTotal = () => {
+    let total = 0;
+
+    // Iterate through all selections
+    Object.entries(selections).forEach(([key, isSelected]) => {
+      if (isSelected) {
+        const [courseIndexStr] = key.split("-");
+        const courseIndex = parseInt(courseIndexStr, 10);
+
+        if (courses[courseIndex]) {
+          const course = courses[courseIndex];
+          // Extract price from course data - assuming it has a price field in USD
+          // If the course price is in a different format, adjust this logic
+          const price = course.Price || 0;
+          total += price;
+        }
+      }
+    });
+
+    return total;
+  };
+
+  const total = calculateTotal();
+
+  useEffect(() => {
+    document.title = "Splunk EDUTRON — Training Plan";
+
+    const handlePopState = () => {
+      if (hasChanges) {
+        setShowConfirmation(true);
+        setPendingAction(() => onBackToWelcome);
+        window.history.pushState({ view: "edit" }, "", "#edit");
+      } else {
+        onBackToWelcome();
+      }
+    };
+
+    window.addEventListener("popstate", handlePopState);
+
+    return () => {
+      window.removeEventListener("popstate", handlePopState);
+    };
+  }, [onBackToWelcome, hasChanges]);
+
+  const updateHistory = (
+    newTitle: string,
+    newCourseCount: number,
+    newTeamMembers: string[],
+    newSelections: Record<string, boolean>,
+  ) => {
+    const newState = {
+      title: newTitle,
+      courseCount: newCourseCount,
+      teamMembers: newTeamMembers,
+      selections: newSelections,
+    };
+    const newHistory = history.slice(0, historyIndex + 1);
+    newHistory.push(newState);
+    setHistory(newHistory);
+    setHistoryIndex(newHistory.length - 1);
+  };
+
+  const checkForChanges = (
+    title: string,
+    courseCount: number,
+    teamMembers: string[],
+    selections: Record<string, boolean>,
+  ) => {
+    const titleChanged = title !== initialState.title;
+    const coursesChanged = courseCount !== initialState.courseCount;
+    const teamChanged =
+      JSON.stringify(teamMembers) !== JSON.stringify(initialState.teamMembers);
+    const selectionsChanged =
+      JSON.stringify(selections) !== JSON.stringify(initialState.selections);
+    setHasChanges(
+      titleChanged || coursesChanged || teamChanged || selectionsChanged,
+    );
+  };
+
+  const handleUpdateTitle = (newTitle: string) => {
+    setPlanTitle(newTitle);
+    updateHistory(newTitle, courseCount, teamMembers, selections);
+    checkForChanges(newTitle, courseCount, teamMembers, selections);
+  };
+
+  const handleDownload = () => {
+    alert("Coming soon!");
+  };
+
+  const handleCoursesLoad = (count: number, courses: Course[]) => {
+    setCourseCount(count);
+    setCourses(courses);
+    updateHistory(planTitle, count, teamMembers, selections);
+    checkForChanges(planTitle, count, teamMembers, selections);
+  };
+
+  const handleTeamMembersChange = (newTeamMembers: string[]) => {
+    setTeamMembers(newTeamMembers);
+    updateHistory(planTitle, courseCount, newTeamMembers, selections);
+    checkForChanges(planTitle, courseCount, newTeamMembers, selections);
+  };
+
+  const handleSelectionsChange = (newSelections: Record<string, boolean>) => {
+    setSelections(newSelections);
+    updateHistory(planTitle, courseCount, teamMembers, newSelections);
+    checkForChanges(planTitle, courseCount, teamMembers, newSelections);
+  };
+
+  const handleBudgetChange = (newBudget: number | null) => {
+    setBudget(newBudget);
+    // Budget changes don't count as "changes" for the unsaved changes prompt
+    // since they're not part of the plan data that would be saved/loaded
+  };
+
+  const handleUndo = () => {
+    if (historyIndex > 0) {
+      const newIndex = historyIndex - 1;
+      const state = history[newIndex];
+      setHistoryIndex(newIndex);
+      setPlanTitle(state.title);
+      setCourseCount(state.courseCount);
+      setTeamMembers(state.teamMembers);
+      setSelections(state.selections);
+      checkForChanges(
+        state.title,
+        state.courseCount,
+        state.teamMembers,
+        state.selections,
+      );
+    }
+  };
+
+  const handleRedo = () => {
+    if (historyIndex < history.length - 1) {
+      const newIndex = historyIndex + 1;
+      const state = history[newIndex];
+      setHistoryIndex(newIndex);
+      setPlanTitle(state.title);
+      setCourseCount(state.courseCount);
+      setTeamMembers(state.teamMembers);
+      setSelections(state.selections);
+      checkForChanges(
+        state.title,
+        state.courseCount,
+        state.teamMembers,
+        state.selections,
+      );
+    }
+  };
+
+  const canUndo = historyIndex > 0;
+  const canRedo = historyIndex < history.length - 1;
+
+  const handleConfirmAction = () => {
+    setShowConfirmation(false);
+    if (pendingAction) {
+      pendingAction();
+    }
+  };
+
+  const handleCancelAction = () => {
+    setShowConfirmation(false);
+    setPendingAction(null);
+  };
+
+  const handleBackToWelcome = () => {
+    if (hasChanges) {
+      setShowConfirmation(true);
+      setPendingAction(() => onBackToWelcome);
+    } else {
+      onBackToWelcome();
+    }
+  };
+
+  return (
+    <div className="min-h-screen bg-gray-50 flex flex-col">
+      <Header
+        onBackToWelcome={handleBackToWelcome}
+        planTitle={planTitle}
+        onUpdateTitle={handleUpdateTitle}
+        onUndo={handleUndo}
+        onRedo={handleRedo}
+        onDownload={handleDownload}
+        canUndo={canUndo}
+        canRedo={canRedo}
+        total={total}
+        onBudgetChange={handleBudgetChange}
+      />
+
+      <PlanScroller
+        courseCount={courseCount}
+        courses={courses}
+        teamMembers={teamMembers}
+        selections={selections}
+        onCoursesLoad={handleCoursesLoad}
+        onTeamMembersChange={handleTeamMembersChange}
+        onSelectionsChange={handleSelectionsChange}
+      />
+
+      <div className="mt-16">
+        <Footer />
+      </div>
+
+      <ConfirmationModal
+        isOpen={showConfirmation}
+        onClose={handleCancelAction}
+        onConfirm={handleConfirmAction}
+        title="Unsaved Changes!"
+        message="We recommend downloading your current plan before continuing. Are you sure you want to leave?"
+      />
+    </div>
+  );
+};
+
+const SplunkEdutron: React.FC = () => {
+  const [currentView, setCurrentView] = useState("welcome");
+  const [hasExistingPlan, setHasExistingPlan] = useState(false);
+
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      const hash = window.location.hash;
+      if (hash === "#edit" || hash === "#plan") {
+        setCurrentView("edit");
+      }
+    }
+  }, []);
+
+  const handleCreatePlan = () => {
+    setCurrentView("edit");
+    setHasExistingPlan(false);
+    if (typeof window !== "undefined") {
+      window.history.pushState({ view: "edit" }, "", "#edit");
+    }
+  };
+
+  const handleLoadPlan = () => {
+    alert("Coming soon!");
+  };
+
+  const handleBackToWelcome = () => {
+    setCurrentView("welcome");
+    setHasExistingPlan(false);
+    if (typeof window !== "undefined") {
+      window.history.pushState({ view: "welcome" }, "", "/");
+    }
+  };
+
+  useEffect(() => {
+    const handlePopState = (event: PopStateEvent) => {
+      if (event.state?.view) {
+        setCurrentView(event.state.view);
+      } else {
+        setCurrentView("welcome");
+      }
+    };
+
+    if (typeof window !== "undefined") {
+      window.addEventListener("popstate", handlePopState);
+    }
+
+    return () => {
+      if (typeof window !== "undefined") {
+        window.removeEventListener("popstate", handlePopSpace);
+      }
+    };
+  }, []);
+
+  useEffect(() => {
+    if (typeof document !== "undefined") {
+      const style = document.createElement("style");
+      style.textContent = `
+        a:hover {
+          cursor: pointer;
+        }
+      `;
+      document.head.appendChild(style);
+
+      return () => {
+        if (document.head.contains(style)) {
+          document.head.removeChild(style);
+        }
+      };
+    }
+  }, []);
+
+  if (currentView === "edit") {
+    return (
+      <PlanEditor
+        onBackToWelcome={handleBackToWelcome}
+        hasExistingPlan={hasExistingPlan}
+      />
+    );
+  }
+
+  return (
+    <WelcomeScreen
+      onCreatePlan={handleCreatePlan}
+      onLoadPlan={handleLoadPlan}
+    />
+  );
+};
+
+export default SplunkEdutron;

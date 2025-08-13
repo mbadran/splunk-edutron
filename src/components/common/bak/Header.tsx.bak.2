@@ -1,0 +1,99 @@
+import React, { lazy, Suspense } from "react";
+import Navigation from "./Navigation";
+import Title from "./Title";
+
+// Conditional imports for planner-specific components
+const PlanActions = lazy(() => import("@/components/PlanActions"));
+const Calculator = lazy(() => import("@/components/Calculator"));
+
+interface HeaderProps {
+  onBackToHome: () => void;
+  pageTitle: string;
+  onUpdateTitle?: (title: string) => void;
+  onUndo?: () => void;
+  onRedo?: () => void;
+  onDownload?: () => void;
+  canUndo?: boolean;
+  canRedo?: boolean;
+  total?: number;
+  onBudgetChange?: (budget: number | null) => void;
+  currentRoute?: string;
+  onNavigate?: (route: string) => void;
+}
+
+const Header: React.FC<HeaderProps> = ({
+  onBackToHome,
+  pageTitle,
+  onUpdateTitle,
+  onUndo,
+  onRedo,
+  onDownload,
+  canUndo = false,
+  canRedo = false,
+  total,
+  onBudgetChange,
+  currentRoute = "",
+  onNavigate,
+}) => {
+  const isPlannerRoute = currentRoute === "/planner";
+  const showPlanActions = isPlannerRoute;
+  const showCalculator = isPlannerRoute;
+
+  return (
+    <div className="bg-gradient-to-br from-slate-800 via-slate-700 to-blue-900 shadow-lg border-b-2 border-orange-500 sticky top-0 z-20">
+      <div className="px-4 sm:px-6 py-4">
+        <div className="flex gap-8">
+          <div className="flex-1 min-w-0 grid grid-cols-[auto_1fr] gap-4">
+            <div className="flex-shrink-0">
+              <Navigation
+                onBackToHome={onBackToHome}
+                currentRoute={currentRoute}
+                onNavigate={onNavigate}
+              />
+            </div>
+
+            <div className="flex-1 min-w-0 overflow-hidden">
+              <Title
+                title={pageTitle}
+                onUpdate={onUpdateTitle}
+                currentRoute={currentRoute}
+              />
+            </div>
+
+            <div className="flex items-center">
+              {showPlanActions && (
+                <Suspense
+                  fallback={
+                    <div className="w-24 h-8 bg-gray-200 animate-pulse rounded"></div>
+                  }
+                >
+                  <PlanActions
+                    onUndo={onUndo}
+                    onRedo={onRedo}
+                    onDownload={onDownload}
+                    canUndo={canUndo}
+                    canRedo={canRedo}
+                  />
+                </Suspense>
+              )}
+            </div>
+
+            {showCalculator && (
+              <div className="flex-shrink-0">
+                <Suspense
+                  fallback={
+                    <div className="w-32 h-12 bg-gray-200 animate-pulse rounded"></div>
+                  }
+                >
+                  <Calculator total={total} onBudgetChange={onBudgetChange} />
+                </Suspense>
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+export default Header;

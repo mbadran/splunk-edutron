@@ -1,0 +1,11 @@
+import React from 'react';
+
+const CalculatorTotal = () => {
+  return (
+    <div className="p-4">
+      {/* Total calculation placeholder */}
+    </div>
+  );
+};
+
+export default CalculatorTotal;

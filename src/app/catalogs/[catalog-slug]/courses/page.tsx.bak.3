@@ -1,0 +1,79 @@
+"use client";
+
+import { useEffect } from "react";
+import { useParams, useRouter } from "next/navigation";
+import { useAtom } from "jotai";
+import { BookOpen } from "lucide-react";
+import { APP_NAME } from "@/utils/constants";
+import Header from "@/components/common/Header";
+import CatalogTable from "@/components/CatalogTable";
+import { setStatusAtom } from "@/atoms/globalAtoms";
+import { loadAllCatalogs } from "@/utils/catalogLoader";
+
+// Force static generation
+export const dynamic = "force-static";
+
+export default function Courses() {
+  const params = useParams();
+  const router = useRouter();
+  const catalogSlug = params?.["catalog-slug"] as string;
+  const [, setStatus] = useAtom(setStatusAtom);
+
+  // Set page title and ensure catalog is loaded
+  useEffect(() => {
+    const catalogName =
+      catalogSlug
+        ?.replace(/-/g, " ")
+        .replace(/\b\w/g, (l) => l.toUpperCase()) || "Catalog";
+    document.title = `Courses - ${catalogName} - Catalogs - ${APP_NAME}`;
+  }, [catalogSlug]);
+
+  const handleBackToHome = () => {
+    router.push("/");
+  };
+
+  const catalogName =
+    catalogSlug?.replace(/-/g, " ").replace(/\b\w/g, (l) => l.toUpperCase()) ||
+    "Catalog";
+
+  return (
+    <div id="courses-page" className="min-h-screen bg-gray-50 flex flex-col">
+      <Header
+        onBackToHome={handleBackToHome}
+        pageTitle={`Courses`}
+        currentRoute={`/catalogs/${catalogSlug}/courses`}
+      />
+
+      <div className="flex-1 flex flex-col p-6">
+        <div className="max-w-6xl mx-auto w-full flex flex-col">
+          <div id="courses-summary" className="mb-6">
+            <div className="bg-white rounded-lg p-6 shadow-sm border">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-4">
+                  <div className="inline-flex items-center justify-center w-12 h-12 bg-orange-100 rounded-lg">
+                    <BookOpen className="w-6 h-6 text-orange-600" />
+                  </div>
+                  <div>
+                    <h2 className="text-2xl font-bold text-gray-900 mb-1">
+                      {catalogName} Courses
+                    </h2>
+                    <p className="text-gray-600">
+                      Browse and explore available training courses.
+                    </p>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div
+            id="courses-table-container"
+            className="flex-1 bg-white rounded-lg shadow-sm border overflow-hidden"
+          >
+            <CatalogTable catalogId={catalogSlug} />
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}

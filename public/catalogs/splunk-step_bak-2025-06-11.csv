@@ -1,0 +1,171 @@
+﻿ID,STEP ID,Name,Alias,Category,Product,Duration,Mode,Language,Price
+EDU-769,cours000000000003416,Intro to Splunk (eLearning),intro-to-splunk,Platform,,0.75,E,English,0
+EDU-779,cours000000000003611,Using Fields (eLearning),using-fields,Platform,,1,E,English,0
+EDU-775,cours000000000003397,Scheduling Reports & Alerts (eLearning),scheduling-reports-and-alerts,Platform,,3,E,English,0
+EDU-777,cours000000000003643,Visualizations (eLearning),visualizations,Platform,,1,E,English,0
+EDU-1013,cours000000000003621,Working with Time (eLearning),working-with-time,Platform,,3,E,English,0
+EDU-1002,cours000000000003582,Statistical Processing (eLearning),statistical-processing,Platform,,3,E,English,0
+EDU-1025,cours000000000003246,Comparing Values (eLearning),comparing-values,Platform,,3,E,English,0
+EDU-1015,cours000000000003392,Result Modification (eLearning),result-modification,Platform,,3,E,English,0
+EDU-753,cours000000000003379,Leveraging Lookups and Subsearches,leveraging-lookups-and-subsearches,Platform,,3,EWL,English,300
+EDU-755,cours000000000003257,Correlation Analysis,correlation-analysis,Platform,,3,ILT,English,500
+EDU-773,cours000000000003458,Search Under the Hood (eLearning),search-under-the-hood,Platform,,1,E,English,0
+EDU-711,cours000000000003383,Multivalue Fields,multivalue-fields,Platform,,3,EWL,English,300
+EDU-771,cours000000000003413,Intro to Knowledge Objects (eLearning),intro-to-knowledge-objects,Platform,,1,E,English,0
+EDU-998,cours000000000003326,Creating Knowledge Objects (eLearning),creating-knowledge-objects,Platform,,3,E,English,0
+EDU-999,cours000000000003321,Creating Field Extractions (eLearning),creating-field-extractions,Platform,,3,E,English,0
+EDU-1000,cours000000000003370,Enriching Data with Lookups (eLearning),enriching-data-with-lookups,Platform,,3,E,English,0
+EDU-1001,cours000000000003337,Data Models (eLearning),data-models,Platform,,3,E,English,0
+EDU-778,cours000000000003411,Introduction to Dashboards (eLearning),introduction-to-dashboards,Platform,,1,E,English,0
+EDU-748,cours000000000003366,Dynamic Dashboards,dynamic-dashboards,Platform,,3,EWL,English,300
+EDU-847,cours000000000003329,Creating Maps,creating-maps,Platform,,4.5,EWL,English,300
+EDU-757,cours000000000003454,Search Optimization,search-optimization,Platform,,3,EWL,English,300
+EDU-1152,cours000000000003512,Splunk Cloud Administration,splunk-cloud-administration,Platform,,18,ILT,English,2000
+EDU-969,cours000000000003500,Splunk Enterprise System Administration,splunk-enterprise-system-administration,Platform,,14,ILT,English,1500
+EDU-970,cours000000000003499,Splunk Enterprise Data Administration,splunk-enterprise-data-administration,Platform,,21,ILT,English,2250
+EDU-1153,cours000000000003588,Transitioning to Splunk Cloud,transitioning-to-splunk-cloud,Platform,,9,ILT,English,1000
+EDU-1009,cours000000000003538,Troubleshooting Splunk Enterprise,troubleshooting-splunk-enterprise,Platform,,9,ILT,English,1000
+EDU-0097,cours000000000019320,Mastering Splunk Data Management Techniques,mastering-splunk-data-management-techniques,Platform,,18,ILT,English,2000
+EDU-1026,cours000000000003513,Splunk Cluster Administration,splunk-cluster-administration,Platform,,13.5,ILT,English,1500
+EDU-240091,cours000000000020428,Introduction to Implementing Splunk SmartStore (eLearning with Labs),introduction-to-implementing-splunk-smartstore,Platform,,3,EWL,English,300
+EDU-536,cours000000000003291,Architecting Splunk Enterprise Deployments,architecting-splunk-enterprise-deployments,Platform,,9,ILT,English,1500
+EDU-67,cours000000000003502,Splunk Enterprise Deployment Practical Lab,splunk-enterprise-deployment-practical-lab,Platform,,24,ILT,English,1000
+EDU-870,cours000000000003591,Using Splunk Enterprise Security,using-splunk-enterprise-security,Security,,13.5,ILT,English,1500
+EDU-890,cours000000000003224,Administering Splunk Enterprise Security,administering-splunk-enterprise-security,Security,,13.5,ILT,English,1500
+EDU-1056,cours000000000003626,Using Splunk IT Service Intelligence 4.15,using-splunk-it-service-intelligence,Observability,,6,ILT,English,750
+EDU-1055,cours000000000003358,Implementing Splunk IT Service Intelligence,implementing-splunk-it-service-intelligence,Observability,,18,ILT,English,2000
+EDU-573,cours000000000003484,Splunk for Analytics and Data Science,splunk-for-analytics-and-data-science,Platform,,13.5,ILT,English,1500
+EDU-240109F,cours000000000019060,Creating Classic Dashboards (eLearning),creating-classic-dashboards,Platform,,2,E,English,0
+EDU-710,cours000000000018920,Building Splunk Classic Apps,building-splunk-classic-apps,Platform,,9,ILT,English,1000
+EDU-1050,cours000000000003363,Using the Splunk REST API,using-the-splunk-rest-api,Platform,,9,ILT,English,1000
+EDU-819,cours000000000003437,Investigating Incidents with Splunk SOAR,investigating-incidents-with-splunk-soar,Security,,3,ILT,English,500
+EDU-818,cours000000000003226,Administering Splunk SOAR,administering-splunk-soar,Security,,3,ILT,English,500
+EDU-809,cours000000000003309,Developing SOAR Playbooks,developing-soar-playbooks,Security,,9,ILT,English,1000
+EDU-810,cours000000000003212,Advanced SOAR Implementation,advanced-soar-implementation,Security,,13.5,ILT,English,1500
+EDU-663,cours000000000003430,Introduction to Splunk Observability Cloud (eLearning),introduction-to-splunk-observability-cloud,Observability,,0.5,E,English,0
+EDU-1040,cours000000000003427,Introduction to Splunk Infrastructure Monitoring (eLearning),introduction-to-splunk-infrastructure-monitoring,Observability,,0.5,E,English,0
+EDU-948,cours000000000003372,Fundamentals of Metrics Monitoring in Splunk Observability Cloud,fundamentals-of-metrics-monitoring-in-splunk-observability-cloud,Observability,,6,ILT,English,750
+EDU-760,cours000000000003563,Splunk Observability Cloud Teams (eLearning),splunk-observability-cloud-teams,Observability,,0.25,E,English,0
+EDU-761,cours000000000003561,Splunk Observability Cloud: Enterprise Features (eLearning),splunk-observability-cloud:-enterprise-features,Observability,,0.5,E,English,0
+EDU-650,cours000000000003645,Visualizing and Alerting in Splunk Observability Cloud,visualizing-and-alerting-in-splunk-observability-cloud,Observability,,4.5,ILT,English,500
+EDU-869,cours000000000003377,Kubernetes Monitoring with Splunk Observability Cloud,kubernetes-monitoring-with-splunk-observability-cloud,Observability,,4.5,ILT,English,500
+EDU-689,cours000000000003406,Ingesting Application Metrics in Splunk Observability Cloud,ingesting-application-metrics-in-splunk-observability-cloud,Observability,,4.5,ILT,English,500
+EDU-1542,cours000000000015226,Using SignalFlow in Splunk Observability Cloud,using-signalflow-in-splunk-observability-cloud,Observability,,9,ILT,English,1000
+EDU-611,cours000000000003640,Using Splunk Observability Cloud Terraform Provider,using-splunk-observability-cloud-terraform-provider,Observability,,9,ILT,English,1000
+EDU-1541,cours000000000013625,Using Splunk Log Observer Connect,using-splunk-log-observer-connect,Observability,,3,ILT,English,500
+EDU-1027,cours000000000003637,Using Splunk Synthetic Monitoring,using-splunk-synthetic-monitoring,Observability,,6,ILT,English,750
+EDU-606,cours000000000003617,Using Splunk Application Performance Monitoring,using-splunk-application-performance-monitoring,Observability,,4.5,ILT,English,500
+EDU-875,cours000000000015622,Configuring Tracing and Profiling for Splunk APM,configuring-tracing-and-profiling-for-splunk-apm,Observability,,4.5,ILT,English,500
+EDU-881,cours000000000015646,Manual Instrumentation with Splunk APM,manual-instrumentation-with-splunk-apm,Observability,,4.5,ILT,English,500
+EDU-1028,cours000000000003634,Using Splunk Real User Monitoring,using-splunk-real-user-monitoring,Observability,,3,ILT,English,500
+EDU-647,cours000000000003388,Responding to Incidents in Splunk On-Call (eLearning),responding-to-incidents-in-splunk-on-call,Observability,,0.25,E,English,0
+EDU-645,cours000000000003564,Splunk On-Call Administration,splunk-on-call-administration,Observability,,4.5,ILT,English,500
+EDU-256,cours000000000003464,Services: Core Implementation,services:-core-implementation,Platform,,40,ILT,English,3000
+EDU-0079,cours000000000014367,Exploring and Analyzing Data with Splunk,exploring-and-analyzing-data-with-splunk,Platform,,9,ILT,English,1000
+EDU-0190,cours000000000019020,SOC Essentials: Investigating and Threat Hunting,soc-essentials:-investigating-and-threat-hunting,Security,,9,ILT,English,1000
+13101,curra000000000003120,Splunk Foundation Fast Start (eLearning),splunk-foundation-fast-start,Platform,,6.75,E,English,300
+13106,curra000000000003121,Splunk Power User Fast Start (eLearning with Labs),splunk-power-user-fast-start,Platform,,32,EWL,English,2400
+EDU-1045,cours000000000003433,Introduction to Splunk Security Essentials (eLearning),introduction-to-splunk-security-essentials,Security,,0.75,E,English,0
+EDU-250008F,cours000000000019621,SOC Essentials: Introduction to Threat Hunting (eLearning),soc-essentials:-introduction-to-threat-hunting,Security,,4,E,English,0
+EDU-954,cours000000000003417,Intro to Splunk (eLearning) - Japanese Captions,intro-to-splunk,Platform,,0.75,E,Japanese,0
+EDU-14628,cours000000000015300,Intro to Splunk (eLearning) - Spanish Captions,intro-to-splunk,Platform,,0.75,E,Spanish,0
+EDU-230550,cours000000000015801,Intro to Splunk (eLearning) - Portugese Captions,intro-to-splunk,Platform,,0.75,E,Portugese,0
+EDU-751,cours000000000003610,Using Fields,using-fields,Platform,,3,EWL,English,300
+EDU-14629,cours000000000015305,Using Fields (eLearning) - Spanish Captions,using-fields,Platform,,1,E,Spanish,0
+EDU-956,cours000000000003612,Using Fields (eLearning) - Japanese Captions,using-fields,Platform,,1,E,Japanese,0
+EDU-774,cours000000000003396,Scheduling Reports & Alerts (eLearning with Labs),scheduling-reports-and-alerts,Platform,,3,EWL,English,300
+EDU-1078,cours000000000003398,Scheduling Reports & Alerts (eLearning) - Japanese Captions,scheduling-reports-and-alerts,Platform,,3,E,Japanese,0
+EDU-14720,cours000000000015462,Scheduling Reports and Alerts (eLearning) - Spanish Captions,scheduling-reports-and-alerts,Platform,,3,E,Spanish,0
+EDU-776,cours000000000003642,Visualizations (eLearning with Labs),visualizations,Platform,,3,EWL,English,300
+EDU-14640,cours000000000015310,Visualizations (eLearning - Spanish Captions),visualizations,Platform,,1,E,Spanish,0
+EDU-955,cours000000000003644,Visualizations (eLearning - Japanese Captions),visualizations,Platform,,1,E,Japanese,0
+EDU-1033,cours000000000003656,Working with Time,working-with-time,Platform,,3,EWL,English,300
+EDU-1093,cours000000000003622,Working with Time (eLearning) - Japanese Captions,working-with-time,Platform,,3,E,Japanese,0
+EDU-1132,cours000000000003657,Working with Time - Japanese,working-with-time,Platform,,3,EWL,Japanese,300
+EDU-758,cours000000000003580,Statistical Processing,statistical-processing,Platform,,3,EWL,English,300
+EDU-1090,cours000000000003583,Statistical Processing (eLearning) - Japanese Captions,statistical-processing,Platform,,3,E,Japanese,0
+EDU-1129,cours000000000003581,Statistical Processing - Japanese,statistical-processing,Platform,,3,EWL,Japanese,300
+EDU-1018,cours000000000003244,Comparing Values,comparing-values,Platform,,3,EWL,English,300
+EDU-1084,cours000000000003247,Comparing Values (eLearning) - Japanese Captions,comparing-values,Platform,,3,E,Japanese,0
+EDU-1123,cours000000000003245,Comparing Values - Japanese,comparing-values,Platform,,3,EWL,Japanese,300
+EDU-982,cours000000000003390,Result Modification,result-modification,Platform,,3,EWL,English,300
+EDU-14641,cours000000000015311,Result Modification (eLearning) - Spanish,result-modification,Platform,,3,E,Spanish,0
+EDU-1087,cours000000000003393,Result Modification (eLearning) - Japanese Captions,result-modification,Platform,,3,E,Japanese,0
+EDU-0552,cours000000000019321,Result Modification (eLearning) - Portugese Captions,result-modification,Platform,,3,E,Portugese,0
+EDU-755-JP,cours000000000018240,Correlation Analysis - Japanese,correlation-analysis,Platform,,3,EWL,Japanese,300
+EDU-772,cours000000000003457,Search Under the Hood (eLearning with labs),search-under-the-hood,Platform,,3,EWL,English,300
+EDU-1075,cours000000000003459,Search Under the Hood (eLearning) - Japanese Captions,search-under-the-hood,Platform,,3,E,Japanese,0
+EDU-1072,cours000000000003414,Intro to Knowledge Objects (eLearning) - Japanese Captions,intro-to-knowledge-objects,Platform,,1,E,Japanese,0
+EDU-14721,cours000000000015463,Intro to Knowledge Objects (eLearning) - Spanish Captions,intro-to-knowledge-objects,Platform,,1,E,Spanish,0
+EDU-746,cours000000000003324,Creating Knowledge Objects,creating-knowledge-objects,Platform,,3,EWL,English,300
+EDU-1065,cours000000000003325,Creating Knowledge Objects - Japanese,creating-knowledge-objects,Platform,,3,EWL,Japanese,300
+EDU-1112,cours000000000003327,Creating Knowledge Objects (eLearning) - Japanese Captions,creating-knowledge-objects,Platform,,3,E,Japanese,0
+EDU-14722,cours000000000015466,Creating Knowledge Objects (eLearning) - Spanish Captions,creating-knowledge-objects,Platform,,3,E,Spanish,0
+EDU-750,cours000000000003319,Creating Field Extractions,creating-field-extractions,Platform,,3,EWL,English,300
+EDU-1114,cours000000000003320,Creating Field Extractions - Japanese,creating-field-extractions,Platform,,3,EWL,Japanese,300
+EDU-1118,cours000000000003322,Creating Field Extractions (eLearning) - Japanese Captions,creating-field-extractions,Platform,,3,E,Japanese,0
+EDU-14723,cours000000000015467,Creating Field Extractions (eLearning) - Spanish Captions,creating-field-extractions,Platform,,3,E,Spanish,0
+EDU-716,cours000000000003368,Enriching Data with Lookups,enriching-data-with-lookups,Platform,,3,EWL,English,300
+EDU-1109,cours000000000003369,Enriching Data with Lookups (eLearning with labs) - Japanese Captions,enriching-data-with-lookups,Platform,,3,EWL,Japanese,300
+EDU-1081,cours000000000003371,Enriching Data with Lookups (eLearning) - Japanese Captions,enriching-data-with-lookups,Platform,,3,E,Japanese,0
+EDU-752,cours000000000003335,Data Models,data-models,Platform,,3,EWL,English,300
+EDU-1120,cours000000000003336,Data Models - Japanese,data-models,Platform,,3,EWL,Japanese,300
+EDU-1069,cours000000000003338,Data Models (eLearning) - Japanese Captions,data-models,Platform,,3,E,Japanese,0
+EDU-0551,cours000000000019300,Data Models (eLearning) - Portugese Captions,data-models,Platform,,3,E,Portugese,0
+EDU-747,cours000000000003410,Introduction to Dashboards,introduction-to-dashboards,Platform,,3,EWL,English,300
+EDU-1135,cours000000000003455,Search Optimization (eLearning with labs) - Japanese Captions,search-optimization,Platform,,3,EWL,Japanese,300
+EDU-250026,cours000000000020429,Implementing Splunk SmartStore for Indexer Clusters (eLearning with labs),implementing-splunk-smartstore-for-indexer-clusters,Platform,,3,EWL,English,300
+EDU-230490,cours000000000017281,Introduction to Splunk IT Service Intelligence (eLearning),introduction-to-splunk-it-service-intelligence,ITSI,,3,E,English,0
+EDU-1544,cours000000000020430,Installing and Administering ITSI (eLearning),installing-and-administering-itsi,ITSI,,6,E,English,0
+EDU-240109P,cours000000000019520,Creating Classic Dashboards (eLearning with labs),creating-classic-dashboards,Platform,,3,EWL,English,300
+EDU-880,cours000000000019000,Creating Classic Dashboards,creating-classic-dashboards,Platform,,9,ILT,English,1000
+EDU-1543,cours000000000015266,Using the Splunk Observability Cloud REST API (eLearning),using-the-splunk-observability-cloud-rest-api,Observability,,4,E,English,0
+EDU-850,cours000000000003308,Developing SOAR Applications (eLearning),developing-soar-applications,Security,,1.75,E,English,0
+EDU-1048,cours000000000003434,Introduction to Splunk SOAR (eLearning),introduction-to-splunk-soar,Security,,1,E,English,0
+EDU-240204,cours000000000019360,Using Prompts in Splunk SOAR Playbooks,using-prompts-in-splunk-soar-playbooks,Security,,2,E,English,300
+EDU-240214F,cours000000000013740,Implementing Splunk SOAR Community Playbooks (free eLearning),implementing-splunk-soar-community-playbooks,Security,,0.5,E,English,0
+EDU-240214,cours000000000020080,Implementing Splunk SOAR Community Playbooks (eLearning with labs),implementing-splunk-soar-community-playbooks,Security,,2,EWL,English,300
+EDU-240243,cours000000000020620,Developing SOAR Playbooks for Splunk Enterprise Security (eLearning),developing-soar-playbooks-for-splunk-enterprise-security,Security,,2,E,English,0
+EDU-240241,cours000000000020140,Developing Splunk SOAR Playbooks in the Visual Playbook Editor (eLearning),developing-splunk-soar-playbooks-in-the-visual-playbook-editor,Security,,2,EWL,English,300
+EDU-240123,cours000000000019040,SOC Essentials: Investigating with Splunk (free eLearning),soc-essentials:-investigating-with-splunk,Security,,2.5,E,English,0
+EDU-240129,cours000000000019041,SOC Essentials: Investigating with Splunk (eLearning with labs),soc-essentials:-investigating-with-splunk,Security,,4,EWL,English,300
+EDU-250008P,cours000000000020120,SOC Essentials: Introduction to Threat Hunting (eLearning with labs),soc-essentials:-introduction-to-threat-hunting,Security,,6,EWL,English,300
+EDU-1029,cours000000000003431,Introduction to Splunk Observability Cloud (eLearning) - Japanese Captions,introduction-to-splunk-observability-cloud,Observability,,0.5,E,Japanese,0
+EDU-1032,cours000000000003428,Introduction to Splunk Infrastructure Monitoring (eLearning) - Japanese Captions,introduction-to-splunk-infrastructure-monitoring,Observability,,0.5,E,Japanese,0
+EDU-766,cours000000000003566,Splunk Search Expert Fast Start,splunk-search-expert-fast-start,Platform,,18,ILT,English,3000
+EDU-1039,cours000000000003432,Introduction to Splunk Real User Monitoring (RUM) (eLearning),introduction-to-splunk-real-user-monitoring,Observability,,0.5,E,English,0
+EDU-1529,cours000000000018980,Administering Splunk Observability Cloud,administering-splunk-observability-cloud,Observability,,1,E,English,0
+EDU-230557,cours000000000018260,Getting Kubernetes Data into Splunk Observability Cloud,getting-kubernetes-data-into-splunk-observability-cloud,Observability,,0.5,E,English,0
+EDU-1023,cours000000000003424,Introduction to Splunk Application Performance Monitoring (eLearning),introduction-to-splunk-application-performance-monitoring,Observability,,0.25,E,English,0
+EDU-230443,cours000000000017660,Setting Up Log Observer Connect (eLearning),setting-up-log-observer-connect,Observability,,1,E,English,0
+EDU-909,cours000000000003429,Introduction to Splunk Log Observer Connect (eLearning),introduction-to-splunk-log-observer-connect,Observability,,0.5,E,English,0
+EDU-1530,cours000000000018960,Advanced Splunk Synthetic Monitoring (eLearning),advanced-splunk-synthetic-monitoring,Observability,,1.5,E,English,0
+EDU-1016,cours000000000003435,Introduction to Splunk Synthetic Monitoring (eLearning),introduction-to-splunk-synthetic-monitoring,Observability,,0.25,E,English,0
+DU-230605,cours000000000017661,Moving from RIGOR to Splunk Synthetic Monitoring (eLearning),moving-from-rigor-to-splunk-synthetic-monitoring,Observability,,0.5,E,English,0
+EDU-902,cours000000000003409,Instrumenting Splunk Mobile RUM (eLearning),instrumenting-splunk-mobile-rum,Observability,,1,E,English,0
+EDU-1010,cours000000000003420,Introduction to Enterprise Security (eLearning),introduction-to-enterprise-security,Security,,0.75,E,English,0
+EDU-1099,cours000000000003421,Introduction to Enterprise Security (eLearning) - Japanese Captions,introduction-to-enterprise-security,Security,,0.75,E,Japanese,0
+EDU-250034,cours000000000020542,AppDynamics 25.1 Update,appdynamics-25.1-update,Observability,,1.25,E,English,0
+EDU-1534,cours000000000017020,Instrumenting Splunk RUM for Browser (eLearning),instrumenting-splunk-rum-for-browser,Observability,,1,E,English,0
+EDU-0492,cours000000000018680,Managing Splunk Observability Cloud Teams as Code (eLearning),managing-splunk-observability-cloud-teams-as-code,Observability,,3,E,English,0
+EDU-1527,cours000000000014840,Optimizing Metrics Usage with Splunk Metrics Pipeline Management (eLearning),optimizing-metrics-usage-with-splunk-metrics-pipeline-management,Observability,,0.75,E,English,0
+EDU-0068,cours000000000018884,Set up Splunk Cloud as IdP for Splunk Observability Cloud (eLearning),set-up-splunk-cloud-as-idp-for-splunk-observability-cloud,Observability,,0.5,E,English,0
+EDU-0070,cours000000000018940,Splunk Observability Cloud Related Content in Splunk Cloud (eLearning),splunk-observability-cloud-related-content-in-splunk-cloud,Observability,,1,E,English,0
+EDU-1522,cours000000000013660,Introduction to Cybersecurity Awareness (eLearning),introduction-to-cybersecurity-awareness,Security,,0.5,E,English,0
+EDU-0245,cours000000000019760,Introduction to Detection Engineering with Splunk,introduction-to-detection-engineering-with-splunk,Security,,2.5,E,English,0
+EDU-1061,cours000000000003436,Introduction to Splunk User Behavior Analytics (UBA) (eLearning),introduction-to-splunk-user-behavior-analytics,Security,,0.25,E,English,0
+EDU-230607,cours000000000017620,Introduction to SPL2 (eLearning),introduction-to-spl2,Platform,,1,E,English,0
+EDU-230606,cours000000000017840,Introduction to Edge Processor (eLearning),introduction-to-edge-processor,Platform,,1,E,English,0
+EDU-240180,cours000000000019660,Splunk Security Use Case Development: Using ESCU and Security Essentials,splunk-security-use-case-development:-using-escu-and-security-essentials,Security,,4,E,English,0
+EDU-240189,cours000000000019120,Introduction to React (eLearning),introduction-to-react,Platform,,0.5,E,English,0
+EDU-0515,cours000000000014180,Security Operations and the Defense Analyst (eLearning),security-operations-and-the-defense-analyst,Security,,2,E,English,0
+EDU-0514,cours000000000013460,The Cybersecurity Landscape (eLearning),the-cybersecurity-landscape,Security,,3,E,English,0
+EDU-23-0522,cours000000000018641,The Art of Investigation (eLearning),the-art-of-investigation,Security,,6,E,English,0
+EDU-937,cours000000000003503,Splunk Enterprise Installation and Configuration (eLearning),splunk-enterprise-installation-and-configuration,Security,,0.5,E,English,0
+EDU-0559,cours000000000019880,ES 8.0 Updates for the Splunk SOC (eLearning),es-8.0-updates-for-the-splunk-soc,Security,,1,E,English,0
+EDU-419,cours000000000003287,Core Consultant Labs,core-consultant-labs,Platform,,1.5,EWL,English,0
+EDU-230589,cours000000000018041,The Cybersecurity Landscape (eLearning) - Japanese,the-cybersecurity-landscape,Security,,3,E,Japanese,0
+EDU-943,cours000000000003606,Upgrading Splunk Enterprise (eLearning),upgrading-splunk-enterprise,Platform,,0.5,E,English,0
+EDU-230512,cours000000000017780,Data and Tools for Defense Analysts (eLearning),data-and-tools-for-defense-analysts,Security,,6,E,English,0
+EDU-1022,cours000000000003375,Getting Data into Splunk Observability Cloud (eLearning),getting-data-into-splunk-observability-cloud,Observability,,1.5,E,English,0
+EDU-1139,cours000000000003384,Network Performance Monitoring with Splunk Network Explorer (eLearning),network-performance-monitoring-with-splunk-network-explorer,Observability,,0.25,E,English,0

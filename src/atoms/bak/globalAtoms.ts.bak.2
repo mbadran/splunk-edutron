@@ -1,0 +1,53 @@
+import { atom } from "jotai";
+import { Catalog, WorkingState } from "@/types/types";
+import { loadAllCatalogs } from "@/utils/catalogLoader";
+
+// Global working indicator state
+export const workingAtom = atom<boolean>(false);
+export const workingMessageAtom = atom<string>("");
+
+// Catalog state atoms
+export const catalogsAtom = atom<Catalog[]>([]);
+export const catalogsLoadingAtom = atom<boolean>(false);
+export const catalogsErrorAtom = atom<string | null>(null);
+
+// Derived atoms
+export const catalogsCountAtom = atom((get) => get(catalogsAtom).length);
+export const totalCoursesAtom = atom((get) => 
+  get(catalogsAtom).reduce((total, catalog) => total + (catalog.courseCount || 0), 0)
+);
+
+// Catalog loading action atom
+export const loadCatalogsAtom = atom(
+  null,
+  async (get, set) => {
+    const isAlreadyLoading = get(catalogsLoadingAtom);
+    if (isAlreadyLoading) return;
+
+    set(catalogsLoadingAtom, true);
+    set(catalogsErrorAtom, null);
+    set(workingAtom, true);
+    set(workingMessageAtom, "Loading catalogs...");
+
+    try {
+      const catalogs = await loadAllCatalogs();
+      set(catalogsAtom, catalogs);
+    } catch (error) {
+      console.error("Failed to load catalogs:", error);
+      set(catalogsErrorAtom, error instanceof Error ? error.message : "Failed to load catalogs");
+    } finally {
+      set(catalogsLoadingAtom, false);
+      set(workingAtom, false);
+      set(workingMessageAtom, "");
+    }
+  }
+);
+
+// Working indicator helpers
+export const setWorkingAtom = atom(
+  null,
+  (get, set, { isWorking, message }: WorkingState) => {
+    set(workingAtom, isWorking);
+    set(workingMessageAtom, message || "");
+  }
+);
